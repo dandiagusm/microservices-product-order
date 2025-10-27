@@ -1,6 +1,6 @@
 microservices-product-order/
 │
-├── docker-compose.yml            # Orchestrates all services (Product, Order, DB, Redis, RabbitMQ)
+├── docker-compose.yml            # All services (Product, Order, DB, Redis, RabbitMQ)
 ├── .env                          
 ├── README.md                     
 │
