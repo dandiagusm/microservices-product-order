@@ -1,17 +1,18 @@
 package messaging
 
 import (
-	"log"
+	"os"
 
 	"github.com/streadway/amqp"
 )
 
 type Publisher struct {
-	Conn    *amqp.Connection
-	Channel *amqp.Channel
+	conn    *amqp.Connection
+	channel *amqp.Channel
 }
 
-func NewPublisher(url string) (*Publisher, error) {
+func NewPublisher() (*Publisher, error) {
+	url := os.Getenv("RABBITMQ_URL")
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
@@ -22,6 +23,21 @@ func NewPublisher(url string) (*Publisher, error) {
 		return nil, err
 	}
 
-	log.Println("[info] Connected to RabbitMQ successfully")
-	return &Publisher{Conn: conn, Channel: ch}, nil
+	return &Publisher{
+		conn:    conn,
+		channel: ch,
+	}, nil
+}
+
+func (p *Publisher) Publish(exchange string, body []byte) error {
+	return p.channel.Publish(
+		"",       // exchange
+		exchange, // routing key
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        body,
+		},
+	)
 }

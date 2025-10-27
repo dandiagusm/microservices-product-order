@@ -1,31 +1,56 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
 
-	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/messaging"
-	"github.com/redis/go-redis/v9"
-	"gorm.io/gorm"
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/domain"
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
+	"github.com/gorilla/mux"
 )
 
 type OrderController struct {
-	DB        *gorm.DB
-	Redis     *redis.Client
-	Publisher *messaging.Publisher
+	service *service.OrderService
 }
 
-func NewOrderController(db *gorm.DB, rdb *redis.Client, pub *messaging.Publisher) *OrderController {
+func NewOrderController(s *service.OrderService) *OrderController {
 	return &OrderController{
-		DB:        db,
-		Redis:     rdb,
-		Publisher: pub,
+		service: s,
 	}
 }
 
-func (o *OrderController) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Create order endpoint"))
+func (c *OrderController) RegisterRoutes(r *mux.Router) {
+	r.HandleFunc("/orders", c.CreateOrder).Methods("POST")
+	r.HandleFunc("/orders/product/{id}", c.GetOrdersByProduct).Methods("GET")
 }
 
-func (o *OrderController) GetOrder(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Get order endpoint"))
+func (c *OrderController) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	var input domain.CreateOrderDTO
+	json.NewDecoder(r.Body).Decode(&input)
+
+	order, err := c.service.CreateOrder(input)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(order)
+}
+
+func (c *OrderController) GetOrdersByProduct(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["id"])
+
+	orders, err := c.service.GetOrdersByProduct(id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(orders)
 }

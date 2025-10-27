@@ -3,8 +3,9 @@ package domain
 import "time"
 
 type Order struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	ProductID uint      `json:"product_id"`
-	Quantity  int       `json:"quantity"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         int       `json:"id"`
+	ProductID  int       `json:"product_id"`
+	TotalPrice float64   `json:"total_price"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
 }

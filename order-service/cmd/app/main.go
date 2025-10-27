@@ -9,45 +9,56 @@ import (
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/cache"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/db"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/messaging"
-	"github.com/joho/godotenv"
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
 )
 
 func main() {
-	// Load .env file
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		log.Println("No .env file found, using system env")
-	}
-
-	// Initialize Postgres
-	postgresDB, err := db.NewPostgresDB()
-	if err != nil {
-		log.Fatalf("[error] Failed to connect to DB: %v", err)
-	}
-
-	// Initialize Redis
-	redisClient := cache.NewRedisClient(
-		os.Getenv("REDIS_HOST"),
-		os.Getenv("REDIS_PORT"),
-	)
-
-	// Initialize RabbitMQ publisher
-	rabbitMQPublisher, err := messaging.NewPublisher(os.Getenv("RABBITMQ_URL"))
-	if err != nil {
-		log.Fatalf("[error] Failed to connect to RabbitMQ: %v", err)
-	}
-
-	// Initialize Controller & Router
-	orderController := controller.NewOrderController(postgresDB, redisClient, rabbitMQPublisher)
-	router := controller.NewRouter(orderController)
-
-	// Start server
+	// Load env
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3002"
 	}
-	log.Printf("Order service listening on %s", port)
-	if err := http.ListenAndServe(":"+port, router); err != nil {
-		log.Fatalf("[error] Failed to start server: %v", err)
+
+	// Init DB
+	dbConn, err := db.NewPostgresDB()
+	if err != nil {
+		log.Fatalf("[DB] Failed to connect: %v", err)
 	}
+
+	// Auto-create orders table
+	_, err = dbConn.Exec(`
+        CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY,
+            product_id INT NOT NULL,
+            total_price NUMERIC NOT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `)
+	if err != nil {
+		log.Fatalf("[DB] Failed to create orders table: %v", err)
+	}
+
+	// Init Redis
+	redisClient, err := cache.NewRedisClient()
+	if err != nil {
+		log.Fatalf("[Redis] Failed to connect: %v", err)
+	}
+
+	// Init RabbitMQ
+	publisher, err := messaging.NewPublisher()
+	if err != nil {
+		log.Fatalf("[RabbitMQ] Failed to connect: %v", err)
+	}
+
+	// Init Order Service
+	orderService := service.NewOrderService(dbConn, redisClient, publisher)
+
+	// Init Controller
+	orderController := controller.NewOrderController(orderService)
+
+	router := controller.NewRouter(orderController)
+
+	log.Printf("Order service listening on %s", port)
+	log.Fatal(http.ListenAndServe(":"+port, router))
 }
