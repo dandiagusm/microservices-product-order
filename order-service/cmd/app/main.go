@@ -17,7 +17,7 @@ func main() {
 	// Load environment variables with defaults
 	port := getEnvAsInt("PORT", 3002)
 	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnvAsInt("DB_PORT", 5432)
+	dbPort := getEnvAsInt("DB_PORT", 5434)
 	dbUser := getEnv("DB_USER", "order_user")
 	dbPassword := getEnv("DB_PASSWORD", "order_pass")
 	dbName := getEnv("DB_NAME", "orders_db")
