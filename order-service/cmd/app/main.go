@@ -26,7 +26,7 @@ func main() {
 	rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 	productServiceURL := getEnv("PRODUCT_SERVICE_URL", "http://localhost:3001")
 
-	// Initialize Postgres DB (auto create table if not exists)
+	// Initialize Postgres DB (auto-create table if not exists)
 	pg, err := db.NewPostgresDB(dbHost, dbUser, dbPassword, dbName, dbPort)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
@@ -39,10 +39,17 @@ func main() {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 
-	// Initialize RabbitMQ
+	// Initialize RabbitMQ Publisher
 	rmq, err := messaging.NewPublisher(rabbitURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	}
+
+	// Subscribe to "order.created" events
+	if err := rmq.Subscribe("order.created", func(msg []byte) {
+		log.Printf("[EVENT] Received order.created: %s", string(msg))
+	}); err != nil {
+		log.Fatalf("Failed to subscribe to order.created: %v", err)
 	}
 
 	// Initialize Order Service
@@ -57,6 +64,7 @@ func main() {
 	}
 }
 
+// getEnv returns the value of an environment variable or a default
 func getEnv(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -64,6 +72,7 @@ func getEnv(key, defaultVal string) string {
 	return defaultVal
 }
 
+// getEnvAsInt returns the int value of an environment variable or a default
 func getEnvAsInt(key string, defaultVal int) int {
 	if valStr := os.Getenv(key); valStr != "" {
 		if val, err := strconv.Atoi(valStr); err == nil {
