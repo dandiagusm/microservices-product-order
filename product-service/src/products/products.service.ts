@@ -20,18 +20,28 @@ export class ProductsService implements OnModuleInit {
 
   async onModuleInit() {
     await this.publisher.ready;
-  
-    await this.publisher.subscribe('order.created', async (order: any) => {
+
+    // Subscribe to order.created events
+    await this.publisher.subscribe(EVENTS.ORDER_CREATED, async (order: any) => {
       try {
         if (!order.productId || !order.quantity) {
           this.logger.error('Invalid order message received', order);
           return;
         }
-      
+
         await this.reduceQty(order.productId, order.quantity);
         this.logger.log(`Reduced product ${order.productId} qty by ${order.quantity}`);
+
+        // ✅ After successful reduction, emit order.updated event
+        await this.publisher.publish(EVENTS.ORDER_UPDATED, {
+          id: order.id,
+          status: 'done',
+          updatedAt: new Date().toISOString(),
+        });
+
+        this.logger.log(`Emitted order.updated event for order ${order.id}`);
       } catch (err) {
-        this.logger.error(`Failed to reduce product ${order.productId} qty`, err);
+        this.logger.error(`Failed to handle order.created event`, err);
       }
     });
   }
@@ -40,7 +50,7 @@ export class ProductsService implements OnModuleInit {
     const product = this.repo.create(dto);
     const saved = await this.repo.save(product);
 
-    // Publish product.created event
+    // Emit product.created event
     await this.publisher.publish(EVENTS.PRODUCT_CREATED, {
       id: saved.id,
       name: saved.name,
@@ -49,9 +59,7 @@ export class ProductsService implements OnModuleInit {
       createdAt: saved.createdAt,
     });
 
-    // Cache the product
     await this.redis.set(`product:${saved.id}`, saved, 600);
-
     return saved;
   }
 
@@ -68,23 +76,16 @@ export class ProductsService implements OnModuleInit {
   }
 
   async reduceQty(id: number, delta: number) {
-    if (!id || isNaN(id)) {
-      throw new Error(`Invalid product id: ${id}`);
-    }
-    if (!delta || isNaN(delta)) {
-      throw new Error(`Invalid delta quantity: ${delta}`);
-    }
+    if (!id || isNaN(id)) throw new Error(`Invalid product id: ${id}`);
+    if (!delta || isNaN(delta)) throw new Error(`Invalid delta quantity: ${delta}`);
 
     const product = await this.repo.findOne({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
 
     product.qty = Math.max(0, product.qty - delta);
     const updated = await this.repo.save(product);
-
-    // Update cache
     await this.redis.set(`product:${id}`, updated, 600);
 
     return updated;
   }
-
 }

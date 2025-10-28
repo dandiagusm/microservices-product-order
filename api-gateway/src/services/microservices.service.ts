@@ -1,29 +1,28 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { services } from '../config';
-import { RabbitmqService } from '../common/rabbitmq/rabbitmq.service';
 import Redis from 'ioredis';
 
 @Injectable()
 export class MicroservicesService {
+  private readonly logger = new Logger(MicroservicesService.name);
   private productClient: AxiosInstance;
   private orderClient: AxiosInstance;
   private redis: Redis;
-  private readonly logger = new Logger(MicroservicesService.name);
 
-  constructor(private rabbit: RabbitmqService) {
+  constructor() {
+    // Initialize HTTP clients
     this.productClient = axios.create({ baseURL: services.product.url });
     this.orderClient = axios.create({ baseURL: services.order.url });
+
+    // Initialize Redis connection
     this.redis = new Redis({
       host: services.redis.host,
       port: services.redis.port,
     });
-
-    // Subscribe to order.created events
-    this.rabbit.subscribe('order.created', async (msg) => {
-      this.logger.log(`Received order.created: ${JSON.stringify(msg)}`);
-    });
   }
+
+  /** ---------------------- PRODUCTS ---------------------- **/
 
   async getProduct(id: number) {
     const cacheKey = `product:${id}`;
@@ -37,15 +36,18 @@ export class MicroservicesService {
 
   async createProduct(dto: { name: string; price: number; qty: number }) {
     const { data } = await this.productClient.post('/products', dto);
-    this.logger.log(`Product created: ${JSON.stringify(data)}`);
+    this.logger.log(`✅ Product created: ${JSON.stringify(data)}`);
     return data;
   }
+
+  /** ---------------------- ORDERS ---------------------- **/
 
   async createOrder(productId: number, quantity: number) {
     const { data } = await this.orderClient.post('/orders', {
       productId,
       quantity,
     });
+    this.logger.log(`✅ Order created: ${JSON.stringify(data)}`);
     return data;
   }
 

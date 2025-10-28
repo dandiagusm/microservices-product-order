@@ -58,7 +58,7 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 	order := &domain.Order{
 		ProductID:  productID,
 		TotalPrice: totalPrice,
-		Status:     "created",
+		Status:     "waiting",
 		CreatedAt:  time.Now(),
 	}
 
