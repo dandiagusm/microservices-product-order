@@ -8,6 +8,6 @@ import (
 func NewRouter(s *service.OrderService) *mux.Router {
 	r := mux.NewRouter()
 	ctrl := NewOrderController(s)
-	ctrl.RegisterRoutes(r)
+	ctrl.Routes(r)
 	return r
 }

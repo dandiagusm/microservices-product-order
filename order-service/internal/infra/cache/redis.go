@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -14,14 +15,24 @@ type RedisClient struct {
 }
 
 func NewRedisClient(host, port string) (*RedisClient, error) {
+	if host == "" || port == "" {
+		return nil, fmt.Errorf("REDIS_HOST or REDIS_PORT is not defined")
+	}
+
 	rdb := redis.NewClient(&redis.Options{
-		Addr: host + ":" + port,
+		Addr: fmt.Sprintf("%s:%s", host, port),
 	})
+
 	ctx := context.Background()
+	// test connection
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, err
 	}
-	return &RedisClient{client: rdb, ctx: ctx}, nil
+
+	return &RedisClient{
+		client: rdb,
+		ctx:    ctx,
+	}, nil
 }
 
 func (r *RedisClient) Set(key string, value interface{}, ttl int) error {
@@ -30,7 +41,7 @@ func (r *RedisClient) Set(key string, value interface{}, ttl int) error {
 }
 
 func (r *RedisClient) Get(key string) ([]byte, error) {
-	data, err := r.client.Get(r.ctx, key).Bytes()
+	data, err := r.client.Get(r.ctx, key).Bytes() // use correct signature: Get(ctx, key)
 	if err != nil {
 		return nil, err
 	}

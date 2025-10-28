@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	// Load environment variables with defaults
+	// Load environment variables
 	port := getEnvAsInt("PORT", 3002)
 	dbHost := getEnv("DB_HOST", "localhost")
 	dbPort := getEnvAsInt("DB_PORT", 5434)
@@ -26,11 +26,12 @@ func main() {
 	rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 	productServiceURL := getEnv("PRODUCT_SERVICE_URL", "http://localhost:3001")
 
-	// Initialize Postgres DB
+	// Initialize Postgres DB (auto create table if not exists)
 	pg, err := db.NewPostgresDB(dbHost, dbUser, dbPassword, dbName, dbPort)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
+	pg.AutoMigrate()
 
 	// Initialize Redis
 	rdb, err := cache.NewRedisClient(redisHost, redisPort)
@@ -56,7 +57,6 @@ func main() {
 	}
 }
 
-// Helper to get environment variable or default value
 func getEnv(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -64,7 +64,6 @@ func getEnv(key, defaultVal string) string {
 	return defaultVal
 }
 
-// Helper to get environment variable as int or default
 func getEnvAsInt(key string, defaultVal int) int {
 	if valStr := os.Getenv(key); valStr != "" {
 		if val, err := strconv.Atoi(valStr); err == nil {

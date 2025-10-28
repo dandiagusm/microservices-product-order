@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/domain"
 	_ "github.com/lib/pq"
@@ -13,31 +14,34 @@ type PostgresDB struct {
 }
 
 func NewPostgresDB(host, user, password, dbname string, port int) (*PostgresDB, error) {
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
-
-	db, err := sql.Open("postgres", psqlInfo)
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := db.Ping(); err != nil {
+	if err = db.Ping(); err != nil {
 		return nil, err
 	}
 
-	// Create table if not exists
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS orders (
+	pg := &PostgresDB{Conn: db}
+	pg.AutoMigrate() // auto-create orders table
+	return pg, nil
+}
+
+// Auto-create orders table if not exists
+func (p *PostgresDB) AutoMigrate() {
+	query := `
+	CREATE TABLE IF NOT EXISTS orders (
 		id SERIAL PRIMARY KEY,
 		product_id INT NOT NULL,
-		total_price NUMERIC(10,2) NOT NULL,
-		status VARCHAR(50) NOT NULL,
-		created_at TIMESTAMP NOT NULL
-	)`)
-	if err != nil {
-		return nil, err
+		total_price DOUBLE PRECISION NOT NULL,
+		status TEXT NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT now()
+	)`
+	if _, err := p.Conn.Exec(query); err != nil {
+		log.Fatalf("Failed to auto-migrate orders table: %v", err)
 	}
-
-	return &PostgresDB{Conn: db}, nil
 }
 
 func (p *PostgresDB) CreateOrder(order *domain.Order) error {
@@ -47,7 +51,8 @@ func (p *PostgresDB) CreateOrder(order *domain.Order) error {
 }
 
 func (p *PostgresDB) GetOrdersByProductID(productID int) ([]*domain.Order, error) {
-	rows, err := p.Conn.Query(`SELECT id, product_id, total_price, status, created_at FROM orders WHERE product_id=$1`, productID)
+	query := `SELECT id, product_id, total_price, status, created_at FROM orders WHERE product_id=$1`
+	rows, err := p.Conn.Query(query, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +65,11 @@ func (p *PostgresDB) GetOrdersByProductID(productID int) ([]*domain.Order, error
 			return nil, err
 		}
 		orders = append(orders, o)
+	}
+
+	// Safety: ensure slice is non-nil
+	if orders == nil {
+		orders = []*domain.Order{}
 	}
 	return orders, nil
 }

@@ -31,8 +31,3 @@ func (p *Publisher) Publish(queue string, body []byte) error {
 		Body:        body,
 	})
 }
-
-func (p *Publisher) Close() {
-	p.channel.Close()
-	p.conn.Close()
-}

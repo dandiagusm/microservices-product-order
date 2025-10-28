@@ -3,9 +3,9 @@ package domain
 import "time"
 
 type Order struct {
-	ID         int       `json:"id"`
-	ProductID  int       `json:"productId"`
-	TotalPrice float64   `json:"totalPrice"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         int       `db:"id"`
+	ProductID  int       `db:"product_id"`
+	TotalPrice float64   `db:"total_price"`
+	Status     string    `db:"status"`
+	CreatedAt  time.Time `db:"created_at"`
 }

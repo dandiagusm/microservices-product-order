@@ -6,50 +6,47 @@ import (
 	"strconv"
 
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
+
 	"github.com/gorilla/mux"
 )
 
 type OrderController struct {
-	service *service.OrderService
+	Service *service.OrderService
 }
 
 func NewOrderController(s *service.OrderService) *OrderController {
-	return &OrderController{service: s}
+	return &OrderController{Service: s}
 }
 
-func (c *OrderController) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/orders", c.CreateOrderHandler).Methods("POST")
-	r.HandleFunc("/orders/product/{id}", c.GetOrdersHandler).Methods("GET")
+func (c *OrderController) Routes(r *mux.Router) {
+	r.HandleFunc("/orders", c.CreateOrder).Methods("POST")
+	r.HandleFunc("/orders/product/{id}", c.GetOrdersByProduct).Methods("GET")
 }
 
-type createOrderRequest struct {
-	ProductID int `json:"productId"`
-	Quantity  int `json:"quantity"` // only used for totalPrice calculation
-}
-
-func (c *OrderController) CreateOrderHandler(w http.ResponseWriter, r *http.Request) {
-	var req createOrderRequest
+func (c *OrderController) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProductID int `json:"productId"`
+		Quantity  int `json:"quantity"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid input", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	order, err := c.service.CreateOrder(req.ProductID, req.Quantity)
+	order, err := c.Service.CreateOrder(req.ProductID, req.Quantity)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(order)
 }
 
-func (c *OrderController) GetOrdersHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	idStr := vars["id"]
+func (c *OrderController) GetOrdersByProduct(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
 	id, _ := strconv.Atoi(idStr)
-
-	orders, err := c.service.GetOrdersByProductID(id)
+	orders, err := c.Service.GetOrdersByProductID(id)
 	if err != nil {
-		http.Error(w, "failed to get orders", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(orders)
