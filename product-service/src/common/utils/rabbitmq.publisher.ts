@@ -1,34 +1,37 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as amqp from 'amqplib';
 
 @Injectable()
-export class RabbitmqPublisher {
+export class RabbitmqPublisher implements OnModuleInit {
   private connection: amqp.Connection;
   private channel: amqp.Channel;
+  private readonly logger = new Logger(RabbitmqPublisher.name);
 
-  async connect() {
-    const host = process.env.RABBITMQ_HOST || 'rabbitmq';
-    const port = +(process.env.RABBITMQ_PORT || 5672);
+  async onModuleInit() {
+    try {
+      const rabbitUrl = process.env.RABBITMQ_URL;
+      if (!rabbitUrl) throw new Error('RABBITMQ_URL not defined');
 
-    let retries = 5;
-    while (retries > 0) {
-      try {
-        this.connection = await amqp.connect(`amqp://${host}:${port}`);
-        this.channel = await this.connection.createChannel();
-        break;
-      } catch (err) {
-        console.log(`RabbitMQ connection failed. Retries left: ${retries}`);
-        retries--;
-        await new Promise((res) => setTimeout(res, 5000));
-      }
+      this.connection = await amqp.connect(rabbitUrl);
+      this.channel = await this.connection.createChannel();
+      this.logger.log('RabbitMQ channel initialized');
+    } catch (error) {
+      this.logger.error('Failed to initialize RabbitMQ', error);
+      throw error;
     }
-
-    if (!this.connection) throw new Error('Unable to connect to RabbitMQ');
   }
 
-  async publish(queue: string, message: any) {
-    if (!this.channel) await this.connect();
+  async publish(queue: string, data: any) {
+    if (!this.channel) {
+      throw new Error('RabbitMQ channel not initialized');
+    }
     await this.channel.assertQueue(queue, { durable: true });
-    this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
+    this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(data)));
+    this.logger.log(`Message sent to queue ${queue}`);
+  }
+
+  async close() {
+    if (this.channel) await this.channel.close();
+    if (this.connection) await this.connection.close();
   }
 }

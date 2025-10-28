@@ -11,7 +11,7 @@ export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private repo: Repository<Product>,
-    private cache: RedisCacheService,
+    private redis: RedisCacheService,
     private publisher: RabbitmqPublisher,
   ) {}
 
@@ -19,7 +19,7 @@ export class ProductsService {
     const product = this.repo.create(dto);
     const saved = await this.repo.save(product);
 
-    // publish event to RabbitMQ with retry inside publisher
+    // Publish product.created event
     await this.publisher.publish('product.created', {
       id: saved.id,
       name: saved.name,
@@ -28,30 +28,32 @@ export class ProductsService {
       createdAt: saved.createdAt,
     });
 
-    // cache the product
-    await this.cache.set(`product:${saved.id}`, JSON.stringify(saved), 600);
+    // Cache the product
+    await this.redis.set(`product:${saved.id}`, saved, 600);
 
     return saved;
   }
 
   async findById(id: number) {
     const key = `product:${id}`;
-    const cached = await this.cache.get(key);
-    if (cached) return JSON.parse(cached);
+    const cached = await this.redis.get(key);
+    if (cached) return cached;
 
     const product = await this.repo.findOne({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
 
-    await this.cache.set(key, JSON.stringify(product), 600);
+    await this.redis.set(key, product, 600);
     return product;
   }
 
   async reduceQty(id: number, delta: number) {
     const product = await this.repo.findOne({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
+
     product.qty = Math.max(0, product.qty - delta);
     const updated = await this.repo.save(product);
-    await this.cache.set(`product:${id}`, JSON.stringify(updated), 600);
+    await this.redis.set(`product:${id}`, updated, 600);
+
     return updated;
   }
 }

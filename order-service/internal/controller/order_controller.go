@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/dandiagusm/microservices-product-order/order-service/internal/domain"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
 	"github.com/gorilla/mux"
 )
@@ -15,42 +14,43 @@ type OrderController struct {
 }
 
 func NewOrderController(s *service.OrderService) *OrderController {
-	return &OrderController{
-		service: s,
-	}
+	return &OrderController{service: s}
 }
 
 func (c *OrderController) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/orders", c.CreateOrder).Methods("POST")
-	r.HandleFunc("/orders/product/{id}", c.GetOrdersByProduct).Methods("GET")
+	r.HandleFunc("/orders", c.CreateOrderHandler).Methods("POST")
+	r.HandleFunc("/orders/product/{id}", c.GetOrdersHandler).Methods("GET")
 }
 
-func (c *OrderController) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	var input domain.CreateOrderDTO
-	json.NewDecoder(r.Body).Decode(&input)
+type createOrderRequest struct {
+	ProductID int `json:"productId"`
+	Quantity  int `json:"quantity"` // only used for totalPrice calculation
+}
 
-	order, err := c.service.CreateOrder(input)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+func (c *OrderController) CreateOrderHandler(w http.ResponseWriter, r *http.Request) {
+	var req createOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid input", http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	order, err := c.service.CreateOrder(req.ProductID, req.Quantity)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	json.NewEncoder(w).Encode(order)
 }
 
-func (c *OrderController) GetOrdersByProduct(w http.ResponseWriter, r *http.Request) {
+func (c *OrderController) GetOrdersHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, _ := strconv.Atoi(vars["id"])
+	idStr := vars["id"]
+	id, _ := strconv.Atoi(idStr)
 
-	orders, err := c.service.GetOrdersByProduct(id)
+	orders, err := c.service.GetOrdersByProductID(id)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		http.Error(w, "failed to get orders", http.StatusInternalServerError)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(orders)
 }

@@ -4,8 +4,8 @@ import "time"
 
 type Order struct {
 	ID         int       `json:"id"`
-	ProductID  int       `json:"product_id"`
-	TotalPrice float64   `json:"total_price"`
+	ProductID  int       `json:"productId"`
+	TotalPrice float64   `json:"totalPrice"`
 	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
+	CreatedAt  time.Time `json:"createdAt"`
 }

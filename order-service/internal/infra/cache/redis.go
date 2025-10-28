@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"os"
+	"encoding/json"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -10,33 +10,29 @@ import (
 
 type RedisClient struct {
 	client *redis.Client
+	ctx    context.Context
 }
 
-func NewRedisClient() (*RedisClient, error) {
-	host := os.Getenv("REDIS_HOST")
-	port := os.Getenv("REDIS_PORT")
-
+func NewRedisClient(host, port string) (*RedisClient, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: host + ":" + port,
 	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, err
 	}
-
-	return &RedisClient{client: rdb}, nil
+	return &RedisClient{client: rdb, ctx: ctx}, nil
 }
 
-func (r *RedisClient) Set(key string, value []byte, ttl time.Duration) error {
-	return r.client.Set(context.Background(), key, value, ttl).Err()
+func (r *RedisClient) Set(key string, value interface{}, ttl int) error {
+	data, _ := json.Marshal(value)
+	return r.client.Set(r.ctx, key, data, time.Duration(ttl)*time.Second).Err()
 }
 
-func (r *RedisClient) Get(key string) (string, error) {
-	return r.client.Get(context.Background(), key).Result()
-}
-
-func (r *RedisClient) ProductServiceURL() string {
-	return os.Getenv("PRODUCT_SERVICE_URL")
+func (r *RedisClient) Get(key string) ([]byte, error) {
+	data, err := r.client.Get(r.ctx, key).Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }

@@ -1,28 +1,35 @@
-import { Injectable } from '@nestjs/common';
-import Redis from 'ioredis';
+import { Injectable, Logger } from '@nestjs/common';
+import Redis from 'ioredis'; 
 
 @Injectable()
 export class RedisCacheService {
-  private client: Redis;
+  private client: Redis; 
+  private readonly logger = new Logger(RedisCacheService.name);
 
   constructor() {
+    const host = process.env.REDIS_HOST;
+    const port = process.env.REDIS_PORT;
+
+    if (!host || !port) {
+      throw new Error('REDIS_HOST or REDIS_PORT is not defined in .env');
+    }
+
     this.client = new Redis({
-      host: process.env.REDIS_HOST || 'redis',
-      port: +(process.env.REDIS_PORT || 6379),
+      host,
+      port: parseInt(port, 10),
     });
 
-    this.client.on('error', (err) => console.error('Redis error:', err));
+    this.client.on('connect', () => this.logger.log('Connected to Redis'));
+    this.client.on('error', (err) => this.logger.error('Redis error', err));
   }
 
-  async set(key: string, value: string, ttlSeconds?: number) {
-    if (ttlSeconds) {
-      await this.client.set(key, value, 'EX', ttlSeconds);
-    } else {
-      await this.client.set(key, value);
-    }
+  async set(key: string, value: any, ttlSeconds: number) {
+    await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
   }
 
-  async get(key: string): Promise<string | null> {
-    return await this.client.get(key);
+  async get(key: string): Promise<any | null> {
+    const data = await this.client.get(key);
+    if (!data) return null;
+    return JSON.parse(data);
   }
 }

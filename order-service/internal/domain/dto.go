@@ -1,10 +1,6 @@
 package domain
 
 type CreateOrderDTO struct {
-	ProductID int `json:"product_id"`
-	Quantity  int `json:"quantity"`
-}
-
-type GetOrdersDTO struct {
-	ProductID int `json:"product_id"`
+	ProductID int `json:"productId"`
+	Quantity  int `json:"quantity"` // client sends quantity
 }

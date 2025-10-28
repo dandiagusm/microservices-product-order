@@ -1,9 +1,13 @@
 package controller
 
-import "github.com/gorilla/mux"
+import (
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
+	"github.com/gorilla/mux"
+)
 
-func NewRouter(orderController *OrderController) *mux.Router {
+func NewRouter(s *service.OrderService) *mux.Router {
 	r := mux.NewRouter()
-	orderController.RegisterRoutes(r)
+	ctrl := NewOrderController(s)
+	ctrl.RegisterRoutes(r)
 	return r
 }
