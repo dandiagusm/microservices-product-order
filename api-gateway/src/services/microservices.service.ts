@@ -14,15 +14,17 @@ export class MicroservicesService {
   constructor(private rabbit: RabbitmqService) {
     this.productClient = axios.create({ baseURL: services.product.url });
     this.orderClient = axios.create({ baseURL: services.order.url });
-    this.redis = new Redis({ host: services.redis.host, port: services.redis.port });
+    this.redis = new Redis({
+      host: services.redis.host,
+      port: services.redis.port,
+    });
 
     // Subscribe to order.created events
     this.rabbit.subscribe('order.created', async (msg) => {
-      this.logger.log(`Received order.created event: ${JSON.stringify(msg)}`);
+      this.logger.log(`Received order.created: ${JSON.stringify(msg)}`);
     });
   }
 
-  // GET /products/:id
   async getProduct(id: number) {
     const cacheKey = `product:${id}`;
     const cached = await this.redis.get(cacheKey);
@@ -33,22 +35,20 @@ export class MicroservicesService {
     return data;
   }
 
-  // GET /products/:id/orders
-  async getProductWithOrders(productId: number) {
-    const [product, orders] = await Promise.all([
-      this.getProduct(productId),
-      this.getOrdersByProduct(productId),
-    ]);
-    return { product, orders };
-  }
-
-  // POST /orders
-  async createOrder(productId: number, quantity: number) {
-    const { data } = await this.orderClient.post('/orders', { productId, quantity });
+  async createProduct(dto: { name: string; price: number; qty: number }) {
+    const { data } = await this.productClient.post('/products', dto);
+    this.logger.log(`Product created: ${JSON.stringify(data)}`);
     return data;
   }
 
-  // GET /orders/product/:productId
+  async createOrder(productId: number, quantity: number) {
+    const { data } = await this.orderClient.post('/orders', {
+      productId,
+      quantity,
+    });
+    return data;
+  }
+
   async getOrdersByProduct(productId: number) {
     const cacheKey = `orders:product:${productId}`;
     const cached = await this.redis.get(cacheKey);
