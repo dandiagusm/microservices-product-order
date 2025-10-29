@@ -37,7 +37,7 @@ type productResponse struct {
 }
 
 func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, error) {
-	// Fetch product info from Product Service
+	// Fetch product
 	res, err := http.Get(fmt.Sprintf("%s/products/%d", s.ProductServiceURL, productID))
 	if err != nil || res.StatusCode != 200 {
 		return nil, fmt.Errorf("product not found")
@@ -49,49 +49,84 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 		return nil, fmt.Errorf("failed to decode product")
 	}
 
-	// Check stock
 	if prod.Qty < quantity {
 		return nil, fmt.Errorf("insufficient stock")
 	}
 
-	totalPrice := float64(quantity) * prod.Price
 	order := &domain.Order{
 		ProductID:  productID,
-		TotalPrice: totalPrice,
+		TotalPrice: float64(quantity) * prod.Price,
 		Status:     "waiting",
 		CreatedAt:  time.Now(),
 	}
 
-	// Save order in DB
 	if err := s.Db.CreateOrder(order); err != nil {
 		return nil, err
 	}
 
-	// Cache orders by product
-	orders, _ := s.Db.GetOrdersByProductID(productID)
-	_ = s.Cache.Set(fmt.Sprintf("orders:product:%d", productID), orders, 60)
+	if err := s.refreshProductOrdersCache(productID); err != nil {
+		log.Printf("⚠️ Failed to refresh cache: %v", err)
+	}
 
-	// Publish order.created event
-	body, _ := json.Marshal(map[string]interface{}{
-		"id":         order.ID,
-		"productId":  order.ProductID,
-		"quantity":   quantity, // calculated here, not stored in DB
-		"totalPrice": order.TotalPrice,
-		"status":     order.Status,
-		"createdAt":  order.CreatedAt,
-	})
+	event := map[string]interface{}{
+		"orderId":   order.ID,
+		"productId": order.ProductID,
+		"quantity":  quantity,
+		"status":    order.Status,
+		"createdAt": order.CreatedAt,
+	}
 
-	if err := s.RMQ.Publish("order.created", body); err != nil {
-		log.Println("Failed to publish order.created:", err)
+	if err := s.RMQ.Publish("order.created", event); err != nil {
+		log.Println("❌ Failed to publish order.created:", err)
 	} else {
-		log.Println("Order Created")
+		log.Printf("📤 Published order.created → orderId=%d productId=%d", order.ID, order.ProductID)
 	}
 
 	return order, nil
 }
 
+func (s *OrderService) ListenOrderUpdated() error {
+	return s.RMQ.Subscribe("order.updated", func(body []byte) {
+		var msg struct {
+			OrderID   int    `json:"orderId"`
+			ProductID int    `json:"productId"`
+			Status    string `json:"status"`
+			UpdatedAt string `json:"updatedAt"`
+		}
+
+		if err := json.Unmarshal(body, &msg); err != nil {
+			log.Println("❌ Failed to decode order.updated:", err)
+			return
+		}
+
+		log.Printf("📩 Received order.updated: %+v", msg)
+
+		if err := s.Db.UpdateOrderStatus(msg.OrderID, msg.Status); err != nil {
+			log.Printf("❌ Failed to update order %d: %v", msg.OrderID, err)
+			return
+		}
+
+		if err := s.refreshProductOrdersCache(msg.ProductID); err != nil {
+			log.Printf("⚠️ Failed to refresh cache: %v", err)
+		}
+
+		log.Printf("✅ Order %d updated to '%s'", msg.OrderID, msg.Status)
+	})
+}
+
+func (s *OrderService) refreshProductOrdersCache(productID int) error {
+	orders, err := s.Db.GetOrdersByProductID(productID)
+	if err != nil {
+		return err
+	}
+	key := fmt.Sprintf("orders:product:%d", productID)
+	return s.Cache.Set(key, orders, 60)
+}
+
+// GetOrdersByProductID retrieves orders with cache fallback
 func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, error) {
-	if data, err := s.Cache.Get(fmt.Sprintf("orders:product:%d", productID)); err == nil && data != nil {
+	cacheKey := fmt.Sprintf("orders:product:%d", productID)
+	if data, err := s.Cache.Get(cacheKey); err == nil && data != nil {
 		var orders []*domain.Order
 		if err := json.Unmarshal(data, &orders); err == nil {
 			return orders, nil
@@ -103,6 +138,9 @@ func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, err
 		return nil, err
 	}
 
-	_ = s.Cache.Set(fmt.Sprintf("orders:product:%d", productID), orders, 60)
+	if err := s.Cache.Set(cacheKey, orders, 60); err != nil {
+		log.Printf("⚠️ Failed to set cache: %v", err)
+	}
+
 	return orders, nil
 }

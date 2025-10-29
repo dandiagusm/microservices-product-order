@@ -73,3 +73,8 @@ func (p *PostgresDB) GetOrdersByProductID(productID int) ([]*domain.Order, error
 	}
 	return orders, nil
 }
+
+func (db *PostgresDB) UpdateOrderStatus(orderID int, status string) error {
+	_, err := db.Conn.Exec(`UPDATE orders SET status = $1 WHERE id = $2`, status, orderID)
+	return err
+}

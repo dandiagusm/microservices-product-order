@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
@@ -13,35 +18,40 @@ export class ProductsService implements OnModuleInit {
 
   constructor(
     @InjectRepository(Product)
-    private repo: Repository<Product>,
-    private redis: RedisCacheService,
-    private publisher: RabbitmqPublisher,
+    private readonly repo: Repository<Product>,
+    private readonly redis: RedisCacheService,
+    private readonly publisher: RabbitmqPublisher,
   ) {}
 
   async onModuleInit() {
     await this.publisher.ready;
 
     // Subscribe to order.created events
-    await this.publisher.subscribe(EVENTS.ORDER_CREATED, async (order: any) => {
+    await this.publisher.subscribe('order.created', async (order: any) => {
       try {
-        if (!order.productId || !order.quantity) {
-          this.logger.error('Invalid order message received', order);
+        const { orderId, productId, quantity } = order;
+        if (!productId || !quantity) {
+          this.logger.error('❌ Invalid order message received', order);
           return;
         }
 
-        await this.reduceQty(order.productId, order.quantity);
-        this.logger.log(`Reduced product ${order.productId} qty by ${order.quantity}`);
+        const updated = await this.reduceQty(productId, quantity);
 
-        // ✅ After successful reduction, emit order.updated event
-        await this.publisher.publish(EVENTS.ORDER_UPDATED, {
-          id: order.id,
+        this.logger.log(
+          `✅ Reduced product ${productId} qty by ${quantity}. Remaining: ${updated.qty}`,
+        );
+
+        // Emit order.updated
+        await this.publisher.publish('order.updated', {
+          orderId,
+          productId,
           status: 'done',
           updatedAt: new Date().toISOString(),
         });
 
-        this.logger.log(`Emitted order.updated event for order ${order.id}`);
+        this.logger.log(`📤 Published order.updated for order ${orderId}`);
       } catch (err) {
-        this.logger.error(`Failed to handle order.created event`, err);
+        this.logger.error('❌ Failed to handle order.created', err);
       }
     });
   }
@@ -59,13 +69,13 @@ export class ProductsService implements OnModuleInit {
       createdAt: saved.createdAt,
     });
 
-    await this.redis.set(`product:${saved.id}`, saved, 600);
+    await this.refreshCache(saved.id);
     return saved;
   }
 
   async findById(id: number) {
     const key = `product:${id}`;
-    const cached = await this.redis.get(key);
+    const cached = await this.redis.get<Product>(key);
     if (cached) return cached;
 
     const product = await this.repo.findOne({ where: { id } });
@@ -76,16 +86,28 @@ export class ProductsService implements OnModuleInit {
   }
 
   async reduceQty(id: number, delta: number) {
-    if (!id || isNaN(id)) throw new Error(`Invalid product id: ${id}`);
-    if (!delta || isNaN(delta)) throw new Error(`Invalid delta quantity: ${delta}`);
-
     const product = await this.repo.findOne({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
 
     product.qty = Math.max(0, product.qty - delta);
     const updated = await this.repo.save(product);
-    await this.redis.set(`product:${id}`, updated, 600);
 
+    await this.refreshCache(id);
     return updated;
+  }
+
+  private async refreshCache(id: number) {
+    try {
+      const product = await this.repo.findOne({ where: { id } });
+      if (product) {
+        await this.redis.set(`product:${id}`, product, 600);
+        this.logger.debug(`🔄 Cache refreshed for product:${id}`);
+      } else {
+        await this.redis.del(`product:${id}`);
+        this.logger.debug(`🗑️ Cache deleted for product:${id}`);
+      }
+    } catch (err) {
+      this.logger.warn(`⚠️ Cache refresh failed for product:${id}`, err);
+    }
   }
 }
