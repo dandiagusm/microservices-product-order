@@ -1,9 +1,9 @@
 import { Controller, Post, Get, Param, Body } from '@nestjs/common';
-import { MicroservicesService } from '../services/microservices.service';
+import { OrdersService } from '../services/orders.service';
 
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly micro: MicroservicesService) {}
+  constructor(private readonly micro: OrdersService) {}
 
   @Post()
   async createOrder(@Body() body: { productId: number; quantity: number }) {

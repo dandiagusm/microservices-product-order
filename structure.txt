@@ -83,15 +83,21 @@ microservices-product-order/
 │   └── .env
 │
 │
-├── gateway/                      # BFF / API Gateway
+├── api-gateway/                      # BFF / API Gateway
 │   ├── src/
-│   │   ├── main.ts
+│   │   ├── middleware/
+│   │   │   ├── validation.middleware.ts
+│   │   │   └── error-handler.middleware.ts
+│   │   ├── common/
+│   │   │   └── dto/                  # Request/response DTOs for validation
+│   │   ├── controllers/ 
+│   │   │   ├── order.controller.ts
+│   │   │   └── product.controller.ts
+│   │   ├── services/
+│   │   │   └── microservices.service.ts
+│   │   ├── config.ts
 │   │   ├── app.module.ts
-│   │   ├── gateway.controller.ts
-│   │   ├── gateway.service.ts
-│   │   └── config/
-│   │       └── services.config.ts
-│   ├── Dockerfile
+│   │   └── main.ts
 │   ├── package.json
 │   └── tsconfig.json
 │

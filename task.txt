@@ -15,3 +15,19 @@ docker compose run --rm --entrypoint k6 k6 run /scripts/script.js
 docker compose run --rm k6 run /scripts/script.js
 
 .\test-load.ps1
+
+
+Client
+   |
+   v
+API Gateway
+   - Basic request validation
+   - Authentication / Authorization
+   - Rate limiting
+   - Request routing
+   - Standardized error responses
+   |
+   v
+Microservices (Order, Product, etc.)
+   - Business logic validation
+   - Internal error handling & panic recovery
