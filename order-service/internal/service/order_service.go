@@ -49,9 +49,9 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 		return nil, fmt.Errorf("failed to decode product")
 	}
 
-	if prod.Qty < quantity {
-		return nil, fmt.Errorf("insufficient stock")
-	}
+	// if prod.Qty < quantity {
+	// 	return nil, fmt.Errorf("insufficient stock")
+	// }
 
 	order := &domain.Order{
 		ProductID:  productID,

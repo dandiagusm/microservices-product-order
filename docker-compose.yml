@@ -1,4 +1,4 @@
-version: "3.8"
+# version: "3.8"
 
 services:
   # Product Service DB
@@ -28,11 +28,17 @@ services:
       - order-db-data:/var/lib/postgresql/data
 
   # Redis
-  redis:
-    image: redis:7
-    container_name: redis
+  product-redis:
+    image: redis:7.4
+    container_name: product-redis
     ports:
       - "6379:6379"
+
+  order-redis:
+    image: redis:7.4
+    container_name: order-redis
+    ports:
+      - "6380:6379"
 
   # RabbitMQ
   rabbitmq:
@@ -45,47 +51,67 @@ services:
       - "5672:5672"
       - "15672:15672" # management UI
 
-  # # Product Service
-  # product-service:
-  #   build:
-  #     context: ./product-service
-  #   container_name: product-service
-  #   depends_on:
-  #     - product-db
-  #     - redis
-  #     - rabbitmq
-  #   environment:
-  #     PORT: 3001
-  #     DB_HOST: product-db
-  #     DB_PORT: 5432
-  #     DB_USER: product_user
-  #     DB_PASSWORD: product_pass
-  #     DB_NAME: products_db
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: 6379
-  #     RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  # Product Service
+  product-service:
+    build:
+      context: ./product-service
+    container_name: product-service
+    depends_on:
+      - product-db
+      - product-redis
+      - rabbitmq
+    restart: on-failure
+    environment:
+      PORT: 3001
+      DB_HOST: product-db
+      DB_PORT: 5432
+      DB_USER: product_user
+      DB_PASSWORD: product_pass
+      DB_NAME: products_db
+      REDIS_HOST: product-redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PRODUCT_SERVICE_URL: http://order-service:3001
+    ports:
+      - "3001:3001" 
 
-  # # Order Service
-  # order-service:
-  #   build:
-  #     context: ./order-service
-  #   container_name: order-service
-  #   depends_on:
-  #     - order-db
-  #     - redis
-  #     - rabbitmq
-  #     - product-service
-  #   environment:
-  #     PORT: 3002
-  #     DB_HOST: order-db
-  #     DB_PORT: 5432
-  #     DB_USER: order_user
-  #     DB_PASSWORD: order_pass
-  #     DB_NAME: orders_db
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: 6379
-  #     RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-  #     PRODUCT_SERVICE_URL: http://product-service:3001
+  order-service:
+    build:
+      context: ./order-service
+    container_name: order-service
+    depends_on:
+      - order-db
+      - order-redis
+      - rabbitmq
+      - product-service
+    restart: on-failure
+    environment:
+      PORT: 3002
+      DB_HOST: order-db
+      DB_PORT: 5432
+      DB_USER: order_user
+      DB_PASSWORD: order_pass
+      DB_NAME: orders_db
+      REDIS_HOST: order-redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PRODUCT_SERVICE_URL: http://product-service:3001
+    ports:
+      - "3002:3002"  
+
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    volumes:
+      - ./k6-tests:/scripts
+    networks:
+      - testnet
+    entrypoint: [""]
+    command: ["/bin/sh"]
+
+networks:
+  testnet:
+    driver: bridge
 
 volumes:
   product-db-data:

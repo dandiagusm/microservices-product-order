@@ -1,0 +1,11 @@
+Each Microservice has its own Redis instance
+
+Pros:
+Isolation: One service crashing or misusing Redis (e.g., large keys) doesn’t affect others.
+Independent scaling: Each service can scale Redis based on its workload.
+Independent caching strategy: Different TTLs, eviction policies, or data models per service.
+Easier ownership and maintenance: Each team/service can manage its own Redis without coordination.
+
+Cons:
+Data duplication: If multiple services cache the same data, you may store duplicates.
+Slightly higher operational overhead: More Redis instances to manage.

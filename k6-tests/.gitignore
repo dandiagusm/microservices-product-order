@@ -1,0 +1,96 @@
+# --------------------------------------------------------------------
+# Global ignore for Node, Go, Docker, and local dev tools
+# --------------------------------------------------------------------
+
+# ======================
+# Node / NestJS
+# ======================
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+debug.log*
+tmp/
+temp/
+
+# ======================
+# Golang
+# ======================
+bin/
+vendor/
+*.exe
+*.test
+*.out
+*.log
+*.tmp
+
+# Go build artifacts
+order-service/go.sum
+order-service/go.mod
+
+# ======================
+# Docker / Compose
+# ======================
+.docker/
+docker-compose.override.yml
+docker-compose.local.yml
+*.pid
+*.sock
+
+# ======================
+# Redis / Postgres / RabbitMQ data
+# ======================
+data/
+*.rdb
+*.sql
+*.dump
+
+# ======================
+# VSCode / IDEs
+# ======================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ======================
+# OS files
+# ======================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ======================
+# Testing / Reports
+# ======================
+coverage/
+reports/
+*.lcov
+*.json
+__pycache__/
+*.pytest_cache/
+.k6/
+
+# ======================
+# Misc
+# ======================
+# Local scripts or temp configs
+scripts/local-*
+tmp/
