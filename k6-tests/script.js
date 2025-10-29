@@ -19,7 +19,7 @@ export const options = {
   },
 };
 
-const BASE_URL = "http://localhost:3002/orders";
+const BASE_URL = "http://order-service:3002/orders";
 
 export default function () {
   const payload = JSON.stringify({

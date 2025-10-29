@@ -1,4 +1,4 @@
-# version: "3.8"
+version: "3.8"
 
 services:
   # Product Service DB
@@ -13,6 +13,8 @@ services:
       - "5433:5432"
     volumes:
       - product-db-data:/var/lib/postgresql/data
+    networks:
+      - appnet
 
   # Order Service DB
   order-db:
@@ -26,6 +28,8 @@ services:
       - "5434:5432"
     volumes:
       - order-db-data:/var/lib/postgresql/data
+    networks:
+      - appnet
 
   # Redis
   product-redis:
@@ -33,12 +37,16 @@ services:
     container_name: product-redis
     ports:
       - "6379:6379"
+    networks:
+      - appnet
 
   order-redis:
     image: redis:7.4
     container_name: order-redis
     ports:
       - "6380:6379"
+    networks:
+      - appnet
 
   # RabbitMQ
   rabbitmq:
@@ -50,6 +58,8 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672" # management UI
+    networks:
+      - appnet
 
   # Product Service
   product-service:
@@ -73,8 +83,11 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       PRODUCT_SERVICE_URL: http://order-service:3001
     ports:
-      - "3001:3001" 
+      - "3001:3001"
+    networks:
+      - appnet
 
+  # Order Service
   order-service:
     build:
       context: ./order-service
@@ -97,20 +110,24 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       PRODUCT_SERVICE_URL: http://product-service:3001
     ports:
-      - "3002:3002"  
+      - "3002:3002"
+    networks:
+      - appnet
 
+  # k6 Load Test
   k6:
     image: grafana/k6:latest
     container_name: k6
     volumes:
       - ./k6-tests:/scripts
+    working_dir: /scripts
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["tail -f /dev/null"]   # keep container idle until you run tests
     networks:
-      - testnet
-    entrypoint: [""]
-    command: ["/bin/sh"]
+      - appnet
 
 networks:
-  testnet:
+  appnet:
     driver: bridge
 
 volumes:

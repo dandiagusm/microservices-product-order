@@ -9,3 +9,9 @@ Easier ownership and maintenance: Each team/service can manage its own Redis wit
 Cons:
 Data duplication: If multiple services cache the same data, you may store duplicates.
 Slightly higher operational overhead: More Redis instances to manage.
+
+Command
+docker compose run --rm --entrypoint k6 k6 run /scripts/script.js
+docker compose run --rm k6 run /scripts/script.js
+
+.\test-load.ps1
