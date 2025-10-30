@@ -2,8 +2,8 @@
 
 ## Run Locally with Docker
 
-### Build and Start All Services
-
+1. Make .env from .env.example in each folder services
+2. Build and Start All Services
 ```bash
 docker compose up -d --build
 ```
