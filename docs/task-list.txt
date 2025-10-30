@@ -54,7 +54,7 @@ Validation, error handling, and correlation ID middleware
 
 8. Documentation
 README with:
- - Local setup using docker-compose up
+ - How to run
  - Architecture overview and event diagram
  - Example API calls (curl/Postman)
  - Performance test summary
