@@ -175,3 +175,59 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 | **Controller / API** | Maps routes to services. Handles request | All services | `OrderController`, `ProductController` |
 | **Event / Messaging** | Publishes or consumes domain events to communicate across services asynchronously. | All services | `RabbitMQ`, `order.created`, `order.updated` |
 
+## Structure
+microservices-product-order/
+├── mock/                      # Mock JSON data untuk testing
+│   └── products.json
+├── order-service/             # Microservice Order
+│   ├── cmd/                   # Entry point
+│   │   └── main.go
+│   ├── internal/
+│   │   ├── controller/        # HTTP handler / routes
+│   │   │   └── order_controller.go
+│   │   ├── service/           # Business logic
+│   │   │   ├── order_service.go
+│   │   │   └── order_service_test.go
+│   │   ├── domain/            # Entity / models
+│   │   │   └── order.go
+│   │   ├── infra/             # Infrastructure layer
+│   │   │   ├── db/            # Database
+│   │   │   │   └── postgres.go
+│   │   │   ├── cache/         # Redis cache
+│   │   │   │   └── redis.go
+│   │   │   └── messaging/     # RabbitMQ publisher/subscriber
+│   │   │       └── publisher.go
+│   │   └── middleware/        # Middleware helper
+│   │       └── requestid.go
+│   └── go.mod
+├── product-service/           # Microservice Product
+│   ├── src/
+│   │   ├── products/          # Module products
+│   │   │   ├── dto/
+│   │   │   │   └── create-product.dto.ts
+│   │   │   ├── entities/
+│   │   │   │   └── product.entity.ts
+│   │   │   └── products.service.ts
+│   │   ├── common/            # Utils (Redis, RabbitMQ)
+│   │   │   ├── utils/         
+│   │   │   │   ├── redis.util.ts
+│   │   │   │   └── rabbitmq.publisher.ts
+│   │   │   └── filters/
+│   │   │       └── error.handler.ts
+│   │   └── main.ts
+├── api-gateway/               # Gateway (NestJS/Express)
+│   ├── src/
+│   │   ├── modules/
+│   │   │   ├── products.module.ts
+│   │   │   └── orders.module.ts
+│   │   ├── common/
+│   │   │   ├── filters/
+│   │   │   │   └── error.handler.ts
+│   │   │   └── utils/
+│   │   │       ├── redis.util.ts
+│   │   │       └── rabbitmq.publisher.ts
+│   │   └── main.ts
+│   └── package.json
+
+
+
