@@ -170,8 +170,8 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 
 | **Layer** | **Purpose / Responsibility** | **Where It Exists** | **Example Components** |
 |------------|-------------------------------|---------------------|--------------------------|
-| **Infrastructure** | Handles technical details — databases, caches, message brokers, file systems, external APIs. | All services | `PostgresDB`, `RedisClient`, `RMQPublisher`|
-| **Service / Business Logic** | Implements application-specific operations using domain and infrastructure. Contains *use cases / service classes*. | All services | `OrderService`, `ProductService` |
-| **Controller / API** | Maps routes to services. Handles request validation and response formatting. | All services | `OrderController`, `ProductController` |
+| **Infrastructure** | Handles technical details — databases, caches, message brokers| All services | `PostgresDB`, `RedisClient`, `RMQPublisher`|
+| **Service / Business Logic** | Implements application-specific operations using domain and infrastructure.| All services | `OrderService`, `ProductService` |
+| **Controller / API** | Maps routes to services. Handles request | All services | `OrderController`, `ProductController` |
 | **Event / Messaging** | Publishes or consumes domain events to communicate across services asynchronously. | All services | `RabbitMQ`, `order.created`, `order.updated` |
 
