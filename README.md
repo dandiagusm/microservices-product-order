@@ -100,19 +100,5 @@ All client requests first pass through the **API Gateway**, which acts as a unif
    - Upon receiving it, the order status is updated to `done` in the order database, and the cache is refreshed if necessary.  
 
 
-## 🧾 Environment Overview
-
-Each microservice is isolated and connected via the same Docker network `appnet`.
-
-| Service | Port | Depends On | Description |
-|----------|------|-------------|--------------|
-| **Product DB** | 5433 | - | PostgreSQL for product data |
-| **Order DB** | 5434 | - | PostgreSQL for order data |
-| **Product Redis** | 6379 | - | Cache for product lookups |
-| **Order Redis** | 6380 | - | Cache for order lookups |
-| **RabbitMQ** | 5672 / 15672 | - | Message broker & management UI |
-| **Product Service** | 3001 | product-db, product-redis, rabbitmq | REST API for product operations |
-| **Order Service** | 3002 | order-db, order-redis, rabbitmq, product-service | REST API for order management |
-| **k6** | N/A | - | Load testing container |
-
----
+# API Request
+Go to `docs/` folder and get / import `Product Order.postman_collection.json` into `Postman`
