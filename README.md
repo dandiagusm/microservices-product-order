@@ -118,7 +118,7 @@ docker compose exec k6 k6 run /scripts/script.js
 ```
 Based on http_reqs, RPS (Requests per second) is 588
 
-# Architecture Explanation
+# Architecture
 
 `product-service` (NestJS) and `order-service` (Go) communicate asynchronously through **RabbitMQ**, and each maintains its own **PostgreSQL** database and **Redis** for frequently requested data.
 
