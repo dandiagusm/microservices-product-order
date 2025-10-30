@@ -25,7 +25,7 @@ export class ProductsService implements OnModuleInit {
   async onModuleInit() {
     await this.publisher.ready;
 
-    // subscribe to order.created messages
+    // subscribe to order.created 
     await this.publisher.subscribe('order.created', async (order: any) => {
       const requestId: string = order.requestId ?? 'N/A';
 
@@ -61,6 +61,15 @@ export class ProductsService implements OnModuleInit {
     const product = this.repo.create(dto);
     const saved = await this.repo.save(product);
 
+    // Emit product.created event
+    await this.publisher.publish('product.created', {
+      id: saved.id,
+      name: saved.name,
+      price: saved.price,
+      qty: saved.qty,
+      createdAt: saved.createdAt,
+    });
+
     this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Created product ${saved.id} (${saved.name})`);
 
     this.refreshCache(saved.id, requestId).catch((err) => this.logger.warn(err));
@@ -86,7 +95,6 @@ export class ProductsService implements OnModuleInit {
     return product;
   }
 
-  // Optimistic qty reduction to handle high concurrency
   async reduceQty(id: number, delta: number, requestId?: string) {
     const product = await this.repo.findOne({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
