@@ -44,6 +44,19 @@ RabbitMQ Management UI:[http://localhost:15672](http://localhost:15672)
 **Password:** `guest`
 
 ---
+## Testing
+### order service 
+in folder order-service
+```
+go test ./internal/service/order_service_test.go -v
+```
+### product service & api gateway
+in folder product-service and api-gateway
+```
+npm run test
+```
+
+---
 
 ## Load Testing with k6
 
