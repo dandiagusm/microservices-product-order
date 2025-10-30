@@ -141,3 +141,8 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 
 # API Request
 Go to `docs/` folder and get / import `Product Order.postman_collection.json` into `Postman`
+or
+Go to
+```
+https://documenter.getpostman.com/view/9425838/2sB3Wnx2vC
+```

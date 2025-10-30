@@ -5,7 +5,6 @@ import { Request, Response, NextFunction } from 'express';
 @Injectable()
 export class RequestIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    // Check if a request ID already exists from client or upstream
     const existingId = req.headers['x-request-id'];
 
     // Generate new UUID if not provided
@@ -13,7 +12,6 @@ export class RequestIdMiddleware implements NestMiddleware {
       ? existingId
       : uuidv4();
 
-    // Attach to request & response
     req.headers['x-request-id'] = requestId;
     res.setHeader('x-request-id', requestId);
 
