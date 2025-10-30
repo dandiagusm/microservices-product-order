@@ -119,7 +119,7 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 2. **Product Service Reaction**  
    - The `product-service` listens for the `order.created` event.  
    - When received, it reduces the product’s stock (`qty`) and updates its database and Redis cache.  
-   - After successfully updating inventory, it emits an **`order.updated`** event to RabbitMQ to signal that the order can be marked as completed.  
+   - After successfully updated product, it emits an **`order.updated`** event to RabbitMQ to signal that the order can be marked as done.  
 
 3. **Order Service Reaction**  
    - The `order-service` listens for the `order.updated` event.  
