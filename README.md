@@ -24,15 +24,14 @@ This will start all microservices and dependencies:
 ```bash
 docker exec -it product-redis redis-cli
 ```
-
+```bash
+GET "product:1"
+```
 ### Order Redis
 ```bash
 docker exec -it order-redis redis-cli
 ```
-
-Example commands:
 ```bash
-GET "product:1"
 GET "orders:product:1"
 ```
 
@@ -40,8 +39,7 @@ GET "orders:product:1"
 
 ## Access RabbitMQ Dashboard
 
-RabbitMQ Management UI:  
-👉 [http://localhost:15672](http://localhost:15672)  
+RabbitMQ Management UI:[http://localhost:15672](http://localhost:15672)  
 **Username:** `guest`  
 **Password:** `guest`
 
@@ -53,11 +51,7 @@ The load test script is located in:
 ```
 k6-tests/script.js
 ```
-
-This test sends load to:
-```
-POST http://order-service:3002/orders
-```
+This test sends load to: POST http://order-service:3002/orders
 
 How to Run 
 ```
