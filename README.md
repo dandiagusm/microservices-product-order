@@ -48,7 +48,7 @@ GET "orders:product:1"
 
 ## Access RabbitMQ Dashboard
 
-RabbitMQ Management UI:[http://localhost:15672](http://localhost:15672)  
+RabbitMQ Management UI: [http://localhost:15672](http://localhost:15672)  
 **Username:** `guest`  
 **Password:** `guest`
 
