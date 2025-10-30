@@ -5,6 +5,8 @@ import { Product } from './entities/product.entity';
 import { RedisCacheService } from '../common/utils/redis.util';
 import { RabbitmqPublisher } from '../common/utils/rabbitmq.publisher';
 import { NotFoundException } from '@nestjs/common';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { CreateProductDto } from './dto/create-product.dto';
 
 describe('ProductsService', () => {
   let service: ProductsService;
@@ -17,38 +19,39 @@ describe('ProductsService', () => {
     name: 'Test Product',
     price: 100,
     qty: 10,
-  };
+    createdAt: new Date(),
+  } as Product;
 
   const mockRepo = {
     findOne: jest.fn(),
     create: jest.fn().mockReturnValue(mockProduct),
-    save: jest.fn(),
+    save: jest.fn().mockResolvedValue(mockProduct),
   };
 
   const mockRedis = {
     get: jest.fn(),
-    set: jest.fn(),
-    del: jest.fn(),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockPublisher = {
     ready: Promise.resolve(),
-    publish: jest.fn(),
-    subscribe: jest.fn(),
+    publish: jest.fn().mockResolvedValue(undefined),
+    subscribe: jest.fn().mockResolvedValue(undefined),
   } as unknown as RabbitmqPublisher;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
-        { provide: Repository, useValue: mockRepo },
+        { provide: getRepositoryToken(Product), useValue: mockRepo },
         { provide: RedisCacheService, useValue: mockRedis },
         { provide: RabbitmqPublisher, useValue: mockPublisher },
       ],
     }).compile();
 
     service = module.get<ProductsService>(ProductsService);
-    repo = module.get<Repository<Product>>(Repository);
+    repo = module.get<Repository<Product>>(getRepositoryToken(Product));
     redis = module.get<RedisCacheService>(RedisCacheService);
     publisher = module.get<RabbitmqPublisher>(RabbitmqPublisher);
   });
@@ -88,15 +91,29 @@ describe('ProductsService', () => {
   });
 
   describe('create', () => {
-    it('should create product and refresh cache', async () => {
-      mockRepo.save.mockResolvedValue(mockProduct);
+    it('should create product, refresh cache, and publish event', async () => {
+      const dto: CreateProductDto = { name: 'Test Product', price: 100, qty: 10 };
 
-      const result = await service.create({ name: 'Test Product', price: 100, qty: 10 }, 'REQ123');
+      const refreshSpy = jest.spyOn(service as any, 'refreshCache').mockResolvedValue(undefined);
+
+      const result = await service.create(dto, 'REQ123');
 
       expect(result).toEqual(mockProduct);
-      expect(mockRepo.create).toHaveBeenCalled();
+      expect(mockRepo.create).toHaveBeenCalledWith(dto);
       expect(mockRepo.save).toHaveBeenCalledWith(mockProduct);
-      expect(mockRedis.set).toHaveBeenCalledWith(`product:${mockProduct.id}`, mockProduct, 600);
+
+      expect(refreshSpy).toHaveBeenCalledWith(mockProduct.id, 'REQ123');
+
+      expect(mockPublisher.publish).toHaveBeenCalledWith(
+        'product.created',
+        expect.objectContaining({
+          id: mockProduct.id,
+          name: mockProduct.name,
+          price: mockProduct.price,
+          qty: mockProduct.qty,
+          createdAt: mockProduct.createdAt,
+        }),
+      );
     });
   });
 
@@ -119,21 +136,24 @@ describe('ProductsService', () => {
     });
   });
 
-  describe('onModuleInit - order.created', () => {
-    it('should subscribe to RabbitMQ messages', async () => {
+  describe('onModuleInit', () => {
+    it('should subscribe to order.created', async () => {
       await service.onModuleInit();
       expect(mockPublisher.subscribe).toHaveBeenCalledWith('order.created', expect.any(Function));
     });
 
     it('should handle order.created message', async () => {
-      const orderMessage = { orderId: 1, productId: 1, quantity: 2, requestId: 'REQ123' };
-      const callback = jest.fn();
+      let callback: (msg: any) => void;
       mockPublisher.subscribe = jest.fn(async (_key, cb) => {
-        callback.mockImplementation(cb);
+        callback = cb;
       });
-
       await service.onModuleInit();
-      await callback(orderMessage);
+
+      const orderMessage = { orderId: 1, productId: 1, quantity: 2, requestId: 'REQ123' };
+      mockRepo.findOne.mockResolvedValue({ ...mockProduct });
+      mockRepo.save.mockResolvedValue({ ...mockProduct, qty: 8 });
+
+      await callback!(orderMessage);
 
       expect(mockRepo.findOne).toHaveBeenCalled();
       expect(mockRepo.save).toHaveBeenCalled();
@@ -145,7 +165,6 @@ describe('ProductsService', () => {
           status: 'done',
           requestId: 'REQ123',
         }),
-        undefined,
       );
     });
   });

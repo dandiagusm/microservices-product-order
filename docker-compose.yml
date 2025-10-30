@@ -1,7 +1,6 @@
 version: "3.8"
 
 services:
-  # Product Service DB
   product-db:
     image: postgres:15
     container_name: product-db
@@ -16,7 +15,6 @@ services:
     networks:
       - appnet
 
-  # Order Service DB
   order-db:
     image: postgres:15
     container_name: order-db
@@ -31,7 +29,6 @@ services:
     networks:
       - appnet
 
-  # Redis
   product-redis:
     image: redis:7.4
     container_name: product-redis
@@ -48,7 +45,6 @@ services:
     networks:
       - appnet
 
-  # RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
@@ -57,11 +53,10 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     ports:
       - "5672:5672"
-      - "15672:15672" # management UI
+      - "15672:15672"
     networks:
       - appnet
 
-  # Product Service
   product-service:
     build:
       context: ./product-service
@@ -81,13 +76,12 @@ services:
       REDIS_HOST: product-redis
       REDIS_PORT: 6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      PRODUCT_SERVICE_URL: http://order-service:3001
+      SERVICE_NAME: product-service
     ports:
       - "3001:3001"
     networks:
       - appnet
 
-  # Order Service
   order-service:
     build:
       context: ./order-service
@@ -108,13 +102,30 @@ services:
       REDIS_HOST: order-redis
       REDIS_PORT: 6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: order-service
       PRODUCT_SERVICE_URL: http://product-service:3001
     ports:
       - "3002:3002"
     networks:
       - appnet
 
-  # k6 Load Test
+  api-gateway:
+    build:
+      context: ./api-gateway
+    container_name: api-gateway
+    depends_on:
+      - product-service
+      - order-service
+    restart: on-failure
+    environment:
+      PORT: 4000
+      PRODUCT_SERVICE_URL: http://product-service:3001
+      ORDER_SERVICE_URL: http://order-service:3002
+    ports:
+      - "4000:4000"
+    networks:
+      - appnet
+
   k6:
     image: grafana/k6:latest
     container_name: k6
@@ -122,7 +133,7 @@ services:
       - ./k6-tests:/scripts
     working_dir: /scripts
     entrypoint: ["/bin/sh", "-c"]
-    command: ["tail -f /dev/null"]   # keep container idle until you run tests
+    command: ["tail -f /dev/null"]
     networks:
       - appnet
 

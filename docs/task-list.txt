@@ -1,0 +1,61 @@
+1. Infrastructure Setup
+Two repositories: product-service (NestJS) and order-service (Golang)
+Shared docker-compose.yml containing:
+ - product-service
+ - order-service
+ - RabbitMQ or Kafka
+ - Redis
+ - PostgreSQL or MySQL
+
+2. Database Design
+products table : id, name, price, qty, createdAt
+orders table :id, productId, totalPrice, status, createdAt
+
+3. product-service (NestJS)
+NestJS project connected to PostgreSQL/MySQL
+Redis cache for product data
+RabbitMQ/Kafka event producer and consumer
+Unit tests
+
+Endpoints
+POST /products → product creation
+GET /products/:id → product retrieval (cached)
+
+Event Flow
+Emits product.created when new product added
+Listens to order.created and updates product quantity
+
+4. order-service (Golang)
+Go project connected to PostgreSQL/MySQL
+Redis cache for order data
+RabbitMQ/Kafka event producer and listener
+Unit tests
+
+Endpoints
+POST /orders 
+GET /orders/product/:productId (cached)
+
+
+Event Flow
+Emits order.created after order creation
+Logs received order.created events
+
+5. Event-Driven System
+product.created and order.created event exchange between services
+product-service updates product quantity when order.created received
+order-service logs order.created and continues background processing
+
+6. Performance Testing
+K6 load test 1000 order requests per second 
+
+7. Bonus Deliverables
+API Gateway or BFF exposing combined endpoints
+Validation, error handling, and correlation ID middleware
+
+8. Documentation
+README with:
+ - Local setup using docker-compose up
+ - Architecture overview and event diagram
+ - Example API calls (curl/Postman)
+ - Performance test summary
+
