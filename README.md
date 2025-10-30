@@ -164,3 +164,15 @@ All client requests first pass through the **API Gateway**, which acts as a unif
     - Publishes order.updated
 8. Order Service may listen for order.updated to refresh cache
 9. Controller responds to client with order info
+
+## Layer Mapping
+
+
+| **Layer** | **Purpose / Responsibility** | **Where It Exists** | **Example Components** |
+|------------|-------------------------------|---------------------|--------------------------|
+| **Domain / Entities** | Core business models and rules. Contains entities and value objects — *pure business logic without dependencies*. | All services | `Order`, `Product`|
+| **Infrastructure** | Handles technical details — databases, caches, message brokers, file systems, external APIs. | All services | `PostgresDB`, `RedisClient`, `RMQPublisher`|
+| **Service / Business Logic** | Implements application-specific operations using domain and infrastructure. Contains *use cases / service classes*. | All services | `OrderService`, `ProductService`, `PaymentService` |
+| **Controller / API** | Maps routes to services. Handles request validation and response formatting. | All services | `OrderController`, `ProductController` |
+| **Event / Messaging** | Publishes or consumes domain events to communicate across services asynchronously. | All services | `RabbitMQ`, `order.created`, `order.updated`` |
+
