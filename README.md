@@ -175,7 +175,8 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 | **Controller / API** | Maps routes to services. Handles request | All services | `OrderController`, `ProductController` |
 | **Event / Messaging** | Publishes or consumes domain events to communicate across services asynchronously. | All services | `RabbitMQ`, `order.created`, `order.updated` |
 
-## Structure
+## Project Structure
+```
 microservices-product-order/
 ├── mock/                      # Mock JSON data untuk testing
 │   └── products.json
@@ -228,6 +229,5 @@ microservices-product-order/
 │   │   │       └── rabbitmq.publisher.ts
 │   │   └── main.ts
 │   └── package.json
-
-
+```
 
