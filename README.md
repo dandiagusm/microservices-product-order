@@ -5,7 +5,7 @@
 1. Make .env from .env.example in each folder services
 2. Build and Start All Services
 ```bash
-docker compose up -d --build
+docker-compose up --build
 ```
 
 This will start all microservices and dependencies:
