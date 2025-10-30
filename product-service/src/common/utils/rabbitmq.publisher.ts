@@ -42,6 +42,13 @@ export class RabbitmqPublisher implements OnModuleInit {
         await this.channel.assertExchange(this.EXCHANGE, 'topic', { durable: true });
 
         this.logger.log('RabbitMQ CONNECTED');
+
+        const serviceName = 'product-service';
+        const productQueue = `product.created.${serviceName}`;
+        await this.channel.assertQueue(productQueue, { durable: true });
+        await this.channel.bindQueue(productQueue, this.EXCHANGE, 'product.created');
+        this.logger.log(`Queue ${productQueue} bound to exchange ${this.EXCHANGE} with key product.created`);
+
         this.readyResolve();
       } catch (err) {
         this.logger.error('RabbitMQ connection failed. Retrying in 5s', err);

@@ -19,7 +19,7 @@ import { Product } from './products/entities/product.entity';
         entities: [Product],
         synchronize: true,
         extra: {
-          max: 50, // connection pool size for high concurrency
+          max: 50, 
         },
       }),
     }),

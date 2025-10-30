@@ -220,7 +220,7 @@ func (s *OrderService) refreshProductOrdersCache(productID int) error {
 		return err
 	}
 	key := fmt.Sprintf("orders:product:%d", productID)
-	return s.Cache.Set(key, orders, 60)
+	return s.Cache.Set(key, orders, 600)
 }
 
 func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, error) {
@@ -237,7 +237,7 @@ func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, err
 		return nil, err
 	}
 
-	_ = s.Cache.Set(cacheKey, orders, 60)
+	_ = s.Cache.Set(cacheKey, orders, 600)
 	return orders, nil
 }
 
