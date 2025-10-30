@@ -19,7 +19,7 @@ This will start all microservices and dependencies:
 ---
 
 ## Access Redis Containers
-
+Make request first to fill the data needed (Create and Get)
 ### Product Redis
 ```bash
 docker exec -it product-redis redis-cli
