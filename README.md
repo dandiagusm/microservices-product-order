@@ -146,3 +146,21 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 3. **Order Service Reaction**  
    - The `order-service` listens for the `order.updated` event.  
    - Upon receiving it, the order status is updated to `done` in the order database, and the cache is refreshed if necessary.  
+
+## How the Flow Works (Example: Order Creation)
+1. Client sends POST /orders to API Gateway
+2. Gateway forwards request to Order Service → OrderController.CreateOrder()
+3. Controller calls OrderService.CreateOrder()
+4. Service fetches product info:
+    - Checks Redis cache first
+    - If cache miss, queries Product Service via HTTP
+    - Caches the result
+5. Service creates order in Postgres
+6. Service asynchronously:
+    - Updates order cache
+    - Publishes order.created event to RabbitMQ
+7. Product Service receives order.created:
+    - Reduces product quantity
+    - Publishes order.updated
+8. Order Service may listen for order.updated to refresh cache
+9. Controller responds to client with order info
