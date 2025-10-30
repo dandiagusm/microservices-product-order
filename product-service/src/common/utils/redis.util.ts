@@ -18,14 +18,14 @@ export class RedisCacheService {
       host,
       port: parseInt(port, 10),
       lazyConnect: true,
-      retryStrategy: (times) => Math.min(times * 50, 2000), // retry on failure
+      retryStrategy: (times) => Math.min(times * 50, 2000), 
     });
 
     this.client.on('connect', () =>
-      this.logger.log(`✅ Connected to Redis at ${host}:${port}`),
+      this.logger.log(`CONNECTED to Redis at ${host}:${port}`),
     );
     this.client.on('error', (err) =>
-      this.logger.error('❌ Redis connection error:', err.message),
+      this.logger.error('Redis connection ERROR:', err.message),
     );
   }
 
@@ -33,9 +33,9 @@ export class RedisCacheService {
   async set(key: string, value: any, ttlSeconds: number): Promise<void> {
     try {
       await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-      this.logger.debug(`💾 Redis SET key=${key}`);
+      this.logger.debug(`Redis SET key=${key}`);
     } catch (err) {
-      this.logger.warn(`⚠️ Redis set failed for ${key}: ${err.message}`);
+      this.logger.warn(`Redis set failed for ${key}: ${err.message}`);
     }
   }
 
@@ -44,10 +44,10 @@ export class RedisCacheService {
     try {
       const data = await this.client.get(key);
       if (!data) return null;
-      this.logger.debug(`📦 Redis GET key=${key}`);
+      this.logger.debug(`Redis GET key=${key}`);
       return JSON.parse(data) as T;
     } catch (err) {
-      this.logger.warn(`⚠️ Redis get failed for ${key}: ${err.message}`);
+      this.logger.warn(`Redis get failed for ${key}: ${err.message}`);
       return null;
     }
   }

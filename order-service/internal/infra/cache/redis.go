@@ -41,7 +41,7 @@ func (r *RedisClient) Set(key string, value interface{}, ttl int) error {
 }
 
 func (r *RedisClient) Get(key string) ([]byte, error) {
-	data, err := r.client.Get(r.ctx, key).Bytes() // use correct signature: Get(ctx, key)
+	data, err := r.client.Get(r.ctx, key).Bytes()
 	if err != nil {
 		return nil, err
 	}

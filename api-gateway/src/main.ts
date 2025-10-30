@@ -3,9 +3,12 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ErrorHandler } from './middlewares/error-handler.middleware';
 import { ResponseStandardizationMiddleware } from './middlewares/response-standardization.middleware';
+import { RequestIdMiddleware } from './middlewares/request-id.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.use(new RequestIdMiddleware().use);
 
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

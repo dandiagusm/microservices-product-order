@@ -37,7 +37,6 @@ type productResponse struct {
 }
 
 func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, error) {
-	// Fetch product
 	res, err := http.Get(fmt.Sprintf("%s/products/%d", s.ProductServiceURL, productID))
 	if err != nil || res.StatusCode != 200 {
 		return nil, fmt.Errorf("product not found")
@@ -65,7 +64,7 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 	}
 
 	if err := s.refreshProductOrdersCache(productID); err != nil {
-		log.Printf("⚠️ Failed to refresh cache: %v", err)
+		log.Printf("FAILED to refresh cache: %v", err)
 	}
 
 	event := map[string]interface{}{
@@ -77,9 +76,9 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 	}
 
 	if err := s.RMQ.Publish("order.created", event); err != nil {
-		log.Println("❌ Failed to publish order.created:", err)
+		log.Println("FAILED to publish order.created:", err)
 	} else {
-		log.Printf("📤 Published order.created → orderId=%d productId=%d", order.ID, order.ProductID)
+		log.Printf("PUBLISHED order.created → orderId=%d productId=%d", order.ID, order.ProductID)
 	}
 
 	return order, nil
@@ -95,22 +94,22 @@ func (s *OrderService) ListenOrderUpdated() error {
 		}
 
 		if err := json.Unmarshal(body, &msg); err != nil {
-			log.Println("❌ Failed to decode order.updated:", err)
+			log.Println("FAILED to decode order.updated:", err)
 			return
 		}
 
-		log.Printf("📩 Received order.updated: %+v", msg)
+		log.Printf("RECEIVED order.updated: %+v", msg)
 
 		if err := s.Db.UpdateOrderStatus(msg.OrderID, msg.Status); err != nil {
-			log.Printf("❌ Failed to update order %d: %v", msg.OrderID, err)
+			log.Printf("FAILED to update order %d: %v", msg.OrderID, err)
 			return
 		}
 
 		if err := s.refreshProductOrdersCache(msg.ProductID); err != nil {
-			log.Printf("⚠️ Failed to refresh cache: %v", err)
+			log.Printf("FAILED to refresh cache: %v", err)
 		}
 
-		log.Printf("✅ Order %d updated to '%s'", msg.OrderID, msg.Status)
+		log.Printf("Order %d updated to '%s'", msg.OrderID, msg.Status)
 	})
 }
 
@@ -123,7 +122,6 @@ func (s *OrderService) refreshProductOrdersCache(productID int) error {
 	return s.Cache.Set(key, orders, 60)
 }
 
-// GetOrdersByProductID retrieves orders with cache fallback
 func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, error) {
 	cacheKey := fmt.Sprintf("orders:product:%d", productID)
 	if data, err := s.Cache.Get(cacheKey); err == nil && data != nil {
@@ -139,7 +137,7 @@ func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, err
 	}
 
 	if err := s.Cache.Set(cacheKey, orders, 60); err != nil {
-		log.Printf("⚠️ Failed to set cache: %v", err)
+		log.Printf("FAILED to set cache: %v", err)
 	}
 
 	return orders, nil

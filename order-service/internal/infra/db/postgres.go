@@ -25,11 +25,10 @@ func NewPostgresDB(host, user, password, dbname string, port int) (*PostgresDB, 
 	}
 
 	pg := &PostgresDB{Conn: db}
-	pg.AutoMigrate() // auto-create orders table
+	pg.AutoMigrate()
 	return pg, nil
 }
 
-// Auto-create orders table if not exists
 func (p *PostgresDB) AutoMigrate() {
 	query := `
 	CREATE TABLE IF NOT EXISTS orders (

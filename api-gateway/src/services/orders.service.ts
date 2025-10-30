@@ -1,41 +1,58 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { services } from '../config';
-import Redis from 'ioredis';
 
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
-  private orderClient: AxiosInstance;
-  private redis: Redis;
+  private readonly orderClient: AxiosInstance;
 
   constructor() {
-    // Initialize HTTP clients
     this.orderClient = axios.create({ baseURL: services.order.url });
-
-    // Initialize Redis connection
-    this.redis = new Redis({
-      host: services.redis.host,
-      port: services.redis.port,
-    });
   }
 
-  async createOrder(productId: number, quantity: number) {
-    const { data } = await this.orderClient.post('/orders', {
-      productId,
-      quantity,
-    });
-    this.logger.log(`✅ Order created: ${JSON.stringify(data)}`);
-    return data;
+  async createOrder(productId: number, quantity: number, requestId?: string) {
+    try {
+      const { data } = await this.orderClient.post(
+        '/orders',
+        { productId, quantity },
+        {
+          headers: requestId ? { 'x-request-id': requestId } : {},
+        },
+      );
+
+      this.logger.log(
+        `[RequestID: ${requestId ?? 'N/A'}] Created order for productId=${productId}, qty=${quantity}`,
+      );
+
+      return data;
+    } catch (error) {
+      this.logger.error(
+        `[RequestID: ${requestId ?? 'N/A'}] Failed to create order: ${error.message}`,
+      );
+      throw error;
+    }
   }
 
-  async getOrdersByProduct(productId: number) {
-    const cacheKey = `orders:product:${productId}`;
-    const cached = await this.redis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+  async getOrdersByProduct(productId: number, requestId?: string) {
+    try {
+      const { data } = await this.orderClient.get(
+        `/orders/product/${productId}`,
+        {
+          headers: requestId ? { 'x-request-id': requestId } : {},
+        },
+      );
 
-    const { data } = await this.orderClient.get(`/orders/product/${productId}`);
-    await this.redis.set(cacheKey, JSON.stringify(data), 'EX', 60);
-    return data;
+      this.logger.log(
+        `[RequestID: ${requestId ?? 'N/A'}] Retrieved orders for productId=${productId}`,
+      );
+
+      return data;
+    } catch (error) {
+      this.logger.error(
+        `[RequestID: ${requestId ?? 'N/A'}] Failed to fetch orders for productId=${productId}: ${error.message}`,
+      );
+      throw error;
+    }
   }
 }

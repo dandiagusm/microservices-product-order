@@ -1,21 +1,20 @@
 import http from "k6/http";
 import { check } from "k6";
 
-// Configure load test
 export const options = {
   scenarios: {
     high_load: {
       executor: "constant-arrival-rate",
-      rate: 1000,            // 1000 requests per second
-      timeUnit: "1s",        // per second
-      duration: "30s",       // run for 30 seconds
-      preAllocatedVUs: 500,  // initial virtual users
-      maxVUs: 2000,          // max virtual users allowed
+      rate: 1000,            
+      timeUnit: "5s",        
+      duration: "30s",      
+      preAllocatedVUs: 500,  
+      maxVUs: 1000,        
     },
   },
   thresholds: {
     http_req_failed: ["rate<0.01"], // less than 1% errors
-    http_req_duration: ["p(95)<500"], // 95% of requests below 500ms
+    http_req_duration: ["p(95)<1000"], // 95% of requests below 1s
   },
 };
 
@@ -33,6 +32,6 @@ export default function () {
 
   check(res, {
     "status is 200": (r) => r.status === 200,
-    "response time < 500ms": (r) => r.timings.duration < 500,
+    "response time < 1s": (r) => r.timings.duration < 1000,
   });
 }

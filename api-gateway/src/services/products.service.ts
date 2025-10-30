@@ -1,39 +1,54 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { services } from '../config';
-import Redis from 'ioredis';
 
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
-  private productClient: AxiosInstance;
-  private redis: Redis;
+  private readonly productClient: AxiosInstance;
 
   constructor() {
-    // Initialize HTTP clients
     this.productClient = axios.create({ baseURL: services.product.url });
-
-    // Initialize Redis connection
-    this.redis = new Redis({
-      host: services.redis.host,
-      port: services.redis.port,
-    });
   }
 
-  async getProduct(id: number) {
-    const cacheKey = `product:${id}`;
-    const cached = await this.redis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+  async getProduct(id: number, requestId?: string) {
+    try {
+      const { data } = await this.productClient.get(`/products/${id}`, {
+        headers: requestId ? { 'x-request-id': requestId } : {},
+      });
 
-    const { data } = await this.productClient.get(`/products/${id}`);
-    await this.redis.set(cacheKey, JSON.stringify(data), 'EX', 600);
-    return data;
+      this.logger.log(
+        `[RequestID: ${requestId ?? 'N/A'}] Retrieved product ${id}`,
+      );
+
+      return data;
+    } catch (error: any) {
+      this.logger.error(
+        `[RequestID: ${requestId ?? 'N/A'}] Failed to fetch product ${id}: ${error.message}`,
+      );
+      throw error;
+    }
   }
 
-  async createProduct(dto: { name: string; price: number; qty: number }) {
-    const { data } = await this.productClient.post('/products', dto);
-    this.logger.log(`✅ Product created: ${JSON.stringify(data)}`);
-    return data;
-  }
+  async createProduct(
+    dto: { name: string; price: number; qty: number },
+    requestId?: string,
+  ) {
+    try {
+      const { data } = await this.productClient.post('/products', dto, {
+        headers: requestId ? { 'x-request-id': requestId } : {},
+      });
 
+      this.logger.log(
+        `[RequestID: ${requestId ?? 'N/A'}] Created product: ${data.id} (${dto.name})`,
+      );
+
+      return data;
+    } catch (error: any) {
+      this.logger.error(
+        `[RequestID: ${requestId ?? 'N/A'}] Failed to create product: ${error.message}`,
+      );
+      throw error;
+    }
+  }
 }

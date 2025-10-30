@@ -28,20 +28,20 @@ export class RabbitmqPublisher implements OnModuleInit {
       try {
         this.connection = await amqp.connect(rabbitUrl);
         this.connection.on('close', () => {
-          this.logger.warn('⚠️ RabbitMQ connection closed. Reconnecting...');
+          this.logger.warn('RabbitMQ connection CLOSED. Reconnecting...');
           setTimeout(connect, 5000);
         });
         this.connection.on('error', (err) => {
-          this.logger.error('RabbitMQ connection error:', err);
+          this.logger.error('RabbitMQ connection ERROR:', err);
         });
 
         this.channel = await this.connection.createChannel();
         await this.channel.assertExchange(this.EXCHANGE, 'topic', { durable: true });
 
-        this.logger.log('✅ RabbitMQ connected and exchange asserted');
+        this.logger.log('RabbitMQ CONNECTED');
         this.readyResolve();
       } catch (err) {
-        this.logger.error('❌ RabbitMQ connection failed. Retrying in 5s', err);
+        this.logger.error('RabbitMQ connection failed. Retrying in 5s', err);
         setTimeout(connect, 5000);
       }
     };
@@ -60,7 +60,7 @@ export class RabbitmqPublisher implements OnModuleInit {
       { persistent: true },
     );
 
-    this.logger.log(`📤 [${routingKey}] Published: ${JSON.stringify(data)}`);
+    this.logger.log(`[${routingKey}] PUBLISHED: ${JSON.stringify(data)}`);
   }
 
   async subscribe(
@@ -70,7 +70,7 @@ export class RabbitmqPublisher implements OnModuleInit {
     await this.ready;
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
 
-    // ✅ Dedicated queue per service + routing key
+    // Dedicated queue per service + routing key
     const serviceName = process.env.SERVICE_NAME || 'product-service';
     const queueName = `${routingKey}.${serviceName}`;
 
@@ -78,7 +78,7 @@ export class RabbitmqPublisher implements OnModuleInit {
     await this.channel.bindQueue(queueName, this.EXCHANGE, routingKey);
 
     this.logger.log(
-      `📥 Subscribed queue [${queueName}] to exchange [${this.EXCHANGE}] with key [${routingKey}]`,
+      `SUBSCRIBED queue [${queueName}] to exchange [${this.EXCHANGE}] with key [${routingKey}]`,
     );
 
     this.channel.consume(queueName, async (msg) => {
@@ -88,7 +88,7 @@ export class RabbitmqPublisher implements OnModuleInit {
         await callback(content);
         this.channel.ack(msg);
       } catch (err) {
-        this.logger.error(`❌ Failed to handle message on ${routingKey}`, err);
+        this.logger.error(`FAILED to handle message on ${routingKey}`, err);
         this.channel.nack(msg, false, true);
       }
     });

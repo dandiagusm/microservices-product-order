@@ -31,20 +31,20 @@ func main() {
 	// Initialize Postgres
 	pg, err := db.NewPostgresDB(dbHost, dbUser, dbPassword, dbName, dbPort)
 	if err != nil {
-		log.Fatalf("❌ DB connection failed: %v", err)
+		log.Fatalf("DB connection FAILED: %v", err)
 	}
 	pg.AutoMigrate()
 
 	// Initialize Redis
 	rdb, err := cache.NewRedisClient(redisHost, redisPort)
 	if err != nil {
-		log.Fatalf("❌ Redis connection failed: %v", err)
+		log.Fatalf("Redis connection FAILED: %v", err)
 	}
 
 	// Initialize RabbitMQ publisher
 	rmq, err := messaging.NewPublisher(rabbitURL, "events", serviceName)
 	if err != nil {
-		log.Fatalf("❌ RabbitMQ connection failed: %v", err)
+		log.Fatalf("RabbitMQ connection FAILED: %v", err)
 	}
 
 	// Initialize OrderService
@@ -56,20 +56,20 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Println("🚀 Starting listener for order.updated...")
+		log.Println("Start LISTENING for order.updated...")
 		if err := orderService.ListenOrderUpdated(); err != nil {
-			log.Fatalf("❌ Failed to start order.updated listener: %v", err)
+			log.Fatalf("FAILED to start order.updated listener: %v", err)
 		}
 	}()
 
 	wg.Wait()
-	log.Println("✅ All RabbitMQ subscriptions ready")
+	log.Println("RabbitMQ subscriptions READY")
 
 	// Start HTTP server
 	router := controller.NewRouter(orderService)
-	log.Printf("✅ Order service listening on port %d", port)
+	log.Printf("Order service LISTENING on port %d", port)
 	if err := http.ListenAndServe(":"+strconv.Itoa(port), router); err != nil {
-		log.Fatalf("❌ Failed to start server: %v", err)
+		log.Fatalf("FAILED to start server: %v", err)
 	}
 }
 

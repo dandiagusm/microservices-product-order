@@ -35,12 +35,12 @@ func (p *Publisher) connect() error {
 	defer p.mutex.Unlock()
 
 	if p.isClosed {
-		return fmt.Errorf("publisher closed")
+		return fmt.Errorf("publisher CLOSED")
 	}
 
 	conn, err := amqp.Dial(p.url)
 	if err != nil {
-		return fmt.Errorf("failed to connect to RabbitMQ: %v", err)
+		return fmt.Errorf("FAILED to connect to RabbitMQ: %v", err)
 	}
 
 	ch, err := conn.Channel()
@@ -51,12 +51,12 @@ func (p *Publisher) connect() error {
 
 	if err := ch.ExchangeDeclare(p.exchange, "topic", true, false, false, false, nil); err != nil {
 		conn.Close()
-		return fmt.Errorf("failed to declare exchange: %v", err)
+		return fmt.Errorf("FAILED to declare exchange: %v", err)
 	}
 
 	p.conn = conn
 	p.channel = ch
-	log.Println("✅ Connected to RabbitMQ and exchange declared:", p.exchange)
+	log.Println("CONNECTED to RabbitMQ and exchange declared:", p.exchange)
 	return nil
 }
 
@@ -66,14 +66,14 @@ func (p *Publisher) reconnectWatcher() {
 
 	for err := range errChan {
 		if err != nil {
-			log.Printf("⚠️ RabbitMQ connection closed: %v. Reconnecting...", err)
+			log.Printf("RabbitMQ connection closed: %v. Reconnecting...", err)
 			for {
 				time.Sleep(5 * time.Second)
 				if err := p.connect(); err == nil {
-					log.Println("✅ Reconnected to RabbitMQ")
+					log.Println("RECONNECTED to RabbitMQ")
 					break
 				}
-				log.Println("❌ Retry reconnect failed, retrying...")
+				log.Println("Retry reconnect FAILED, retrying...")
 			}
 		}
 	}
@@ -90,7 +90,7 @@ func (p *Publisher) Publish(routingKey string, data interface{}) error {
 
 	body, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("failed to marshal data: %v", err)
+		return fmt.Errorf("FAILED to marshal data: %v", err)
 	}
 
 	err = p.channel.Publish(
@@ -106,10 +106,10 @@ func (p *Publisher) Publish(routingKey string, data interface{}) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to publish: %v", err)
+		return fmt.Errorf("FAILED to publish: %v", err)
 	}
 
-	log.Printf("📤 Message published to exchange '%s' with key '%s'", p.exchange, routingKey)
+	log.Printf("Message PUBLISHED to exchange '%s' with key '%s'", p.exchange, routingKey)
 	return nil
 }
 
@@ -125,18 +125,18 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 	queueName := fmt.Sprintf("%s-%s", p.serviceName, routingKey) // unique per service
 	_, err := p.channel.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
-		return fmt.Errorf("queue declare failed: %v", err)
+		return fmt.Errorf("queue declare FAILED: %v", err)
 	}
 
 	if err := p.channel.QueueBind(queueName, routingKey, p.exchange, false, nil); err != nil {
-		return fmt.Errorf("queue bind failed: %v", err)
+		return fmt.Errorf("queue bind FAILED: %v", err)
 	}
 
-	log.Printf("📥 Subscribed queue [%s] to exchange [%s] with key [%s]", queueName, p.exchange, routingKey)
+	log.Printf("SUBSCRIBED queue [%s] to exchange [%s] with key [%s]", queueName, p.exchange, routingKey)
 
 	msgs, err := p.channel.Consume(queueName, "", false, false, false, false, nil)
 	if err != nil {
-		return fmt.Errorf("queue consume failed: %v", err)
+		return fmt.Errorf("queue consume FAILED: %v", err)
 	}
 
 	go func() {
@@ -144,7 +144,7 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 			func(m amqp.Delivery) {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("❌ Panic while handling message: %v", r)
+						log.Printf("Panic while handling message: %v", r)
 						m.Nack(false, true)
 					}
 				}()
@@ -168,5 +168,5 @@ func (p *Publisher) Close() {
 	if p.conn != nil {
 		_ = p.conn.Close()
 	}
-	log.Println("🔌 RabbitMQ connection closed")
+	log.Println("🔌 RabbitMQ connection CLOSED")
 }
