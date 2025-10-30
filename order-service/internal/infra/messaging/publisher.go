@@ -32,7 +32,6 @@ func NewPublisher(url, exchange, serviceName string) (*Publisher, error) {
 func (p *Publisher) connect() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-
 	if p.isClosed {
 		return fmt.Errorf("publisher CLOSED")
 	}
@@ -41,13 +40,11 @@ func (p *Publisher) connect() error {
 	if err != nil {
 		return fmt.Errorf("FAILED to connect to RabbitMQ: %v", err)
 	}
-
 	ch, err := conn.Channel()
 	if err != nil {
 		conn.Close()
 		return fmt.Errorf("failed to open channel: %v", err)
 	}
-
 	if err := ch.ExchangeDeclare(p.exchange, "topic", true, false, false, false, nil); err != nil {
 		conn.Close()
 		return fmt.Errorf("FAILED to declare exchange: %v", err)
@@ -65,7 +62,6 @@ func (p *Publisher) reconnectWatcher() {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-
 		errChan := make(chan *amqp.Error)
 		p.conn.NotifyClose(errChan)
 		err := <-errChan
@@ -83,15 +79,12 @@ func (p *Publisher) reconnectWatcher() {
 	}
 }
 
-// Publish marshals data, optionally inject requestId
 func (p *Publisher) Publish(routingKey string, data map[string]interface{}, requestId ...string) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-
 	if p.channel == nil {
 		return fmt.Errorf("channel not initialized")
 	}
-
 	if len(requestId) > 0 {
 		data["requestId"] = requestId[0]
 	}
@@ -129,7 +122,7 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 		return fmt.Errorf("channel not initialized")
 	}
 
-	queueName := fmt.Sprintf("%s.%s", routingKey, p.serviceName) // consistent with NestJS
+	queueName := fmt.Sprintf("%s.%s", routingKey, p.serviceName)
 	_, err := p.channel.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("queue declare FAILED: %v", err)
@@ -138,8 +131,6 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 	if err := p.channel.QueueBind(queueName, routingKey, p.exchange, false, nil); err != nil {
 		return fmt.Errorf("queue bind FAILED: %v", err)
 	}
-
-	log.Printf("SUBSCRIBED queue [%s] to exchange [%s] with key [%s]", queueName, p.exchange, routingKey)
 
 	msgs, err := p.channel.Consume(queueName, "", false, false, false, false, nil)
 	if err != nil {
@@ -167,7 +158,6 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 	return nil
 }
 
-// wrapper to catch panics in handler
 func safeHandler(h func([]byte), body []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -181,7 +171,6 @@ func safeHandler(h func([]byte), body []byte) (err error) {
 func (p *Publisher) Close() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-
 	p.isClosed = true
 	if p.channel != nil {
 		_ = p.channel.Close()

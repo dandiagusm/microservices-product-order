@@ -25,6 +25,7 @@ export class ProductsService implements OnModuleInit {
   async onModuleInit() {
     await this.publisher.ready;
 
+    // subscribe to order.created messages
     await this.publisher.subscribe('order.created', async (order: any) => {
       const requestId: string = order.requestId ?? 'N/A';
 
@@ -46,7 +47,7 @@ export class ProductsService implements OnModuleInit {
           productId,
           status: 'done',
           updatedAt: new Date().toISOString(),
-          requestId, // consistent key
+          requestId,
         });
 
         this.logger.log(`[RequestID: ${requestId}] Published order.updated for order ${orderId}`);
@@ -62,7 +63,7 @@ export class ProductsService implements OnModuleInit {
 
     this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Created product ${saved.id} (${saved.name})`);
 
-    await this.refreshCache(saved.id, requestId);
+    this.refreshCache(saved.id, requestId).catch((err) => this.logger.warn(err));
     return saved;
   }
 
@@ -80,26 +81,25 @@ export class ProductsService implements OnModuleInit {
       throw new NotFoundException('Product not found');
     }
 
-    await this.redis.set(key, product, 600);
+    this.redis.set(key, product, 600).catch((err) => this.logger.warn(err));
     this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Cache miss → fetched product:${id}`);
     return product;
   }
 
+  // Optimistic qty reduction to handle high concurrency
   async reduceQty(id: number, delta: number, requestId?: string) {
     const product = await this.repo.findOne({ where: { id } });
-    if (!product) {
-      this.logger.warn(`[RequestID: ${requestId ?? 'N/A'}] Product not found: ${id}`);
-      throw new NotFoundException('Product not found');
-    }
+    if (!product) throw new NotFoundException('Product not found');
 
-    product.qty = Math.max(0, product.qty - delta);
+    const newQty = Math.max(0, product.qty - delta);
+    product.qty = newQty;
     const updated = await this.repo.save(product);
 
     this.logger.log(
       `[RequestID: ${requestId ?? 'N/A'}] Reduced qty for product:${id} by ${delta}. Remaining: ${updated.qty}`,
     );
 
-    await this.refreshCache(id, requestId);
+    this.refreshCache(id, requestId).catch((err) => this.logger.warn(err));
     return updated;
   }
 

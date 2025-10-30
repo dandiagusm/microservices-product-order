@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/domain"
 	_ "github.com/lib/pq"
@@ -20,6 +21,11 @@ func NewPostgresDB(host, user, password, dbname string, port int) (*PostgresDB, 
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(50)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
@@ -66,7 +72,6 @@ func (p *PostgresDB) GetOrdersByProductID(productID int) ([]*domain.Order, error
 		orders = append(orders, o)
 	}
 
-	// Safety: ensure slice is non-nil
 	if orders == nil {
 		orders = []*domain.Order{}
 	}

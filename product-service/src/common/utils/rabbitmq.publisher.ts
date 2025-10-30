@@ -27,7 +27,7 @@ export class RabbitmqPublisher implements OnModuleInit {
 
     const connect = async () => {
       try {
-        this.connection = await amqp.connect(rabbitUrl);
+        this.connection = await amqp.connect(rabbitUrl, { heartbeat: 30 });
 
         this.connection.on('close', () => {
           this.logger.warn('RabbitMQ connection CLOSED. Reconnecting...');
@@ -69,9 +69,7 @@ export class RabbitmqPublisher implements OnModuleInit {
       { persistent: true, contentType: 'application/json' },
     );
 
-    this.logger.log(
-      `[RequestID: ${message.requestId}] [${routingKey}] PUBLISHED: ${JSON.stringify(data)}`,
-    );
+    this.logger.log(`[RequestID: ${message.requestId}] [${routingKey}] PUBLISHED`);
   }
 
   async subscribe(

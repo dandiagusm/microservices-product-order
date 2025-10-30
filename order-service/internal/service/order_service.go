@@ -24,10 +24,15 @@ type OrderService struct {
 	HttpClient        *http.Client
 
 	rmqWorkerPool chan map[string]interface{}
+	cacheWorker   chan int
 	wg            sync.WaitGroup
 }
 
-const RMQWorkerCount = 20
+const (
+	RMQWorkerCount    = 20
+	CacheWorkerBatch  = 500 * time.Millisecond
+	CacheWorkerBuffer = 1000
+)
 
 func NewOrderService(pg *db.PostgresDB, r *cache.RedisClient, rmq *messaging.Publisher, productURL string) *OrderService {
 	s := &OrderService{
@@ -35,14 +40,23 @@ func NewOrderService(pg *db.PostgresDB, r *cache.RedisClient, rmq *messaging.Pub
 		Cache:             r,
 		RMQ:               rmq,
 		ProductServiceURL: productURL,
-		HttpClient:        &http.Client{Timeout: 2 * time.Second},
-		rmqWorkerPool:     make(chan map[string]interface{}, 1000),
+		HttpClient: &http.Client{
+			Timeout: 2 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        200,
+				MaxIdleConnsPerHost: 200,
+			},
+		},
+		rmqWorkerPool: make(chan map[string]interface{}, 1000),
+		cacheWorker:   make(chan int, CacheWorkerBuffer),
 	}
 
 	for i := 0; i < RMQWorkerCount; i++ {
 		s.wg.Add(1)
 		go s.rmqWorker()
 	}
+
+	go s.cacheWorkerLoop()
 
 	return s
 }
@@ -52,6 +66,32 @@ func (s *OrderService) rmqWorker() {
 	for event := range s.rmqWorkerPool {
 		if err := s.RMQ.Publish("order.created", event); err != nil {
 			log.Printf("[RequestID: %v] FAILED to publish order.created: %v", event["requestId"], err)
+		}
+	}
+}
+
+// batch cache refresher
+func (s *OrderService) cacheWorkerLoop() {
+	productSet := map[int]struct{}{}
+	ticker := time.NewTicker(CacheWorkerBatch)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case pid, ok := <-s.cacheWorker:
+			if !ok {
+				// flush remaining products before exit
+				for p := range productSet {
+					_ = s.refreshProductOrdersCache(p)
+				}
+				return
+			}
+			productSet[pid] = struct{}{}
+		case <-ticker.C:
+			for p := range productSet {
+				_ = s.refreshProductOrdersCache(p)
+			}
+			productSet = map[int]struct{}{}
 		}
 	}
 }
@@ -83,7 +123,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, productID, quantity int)
 		return nil, err
 	}
 
-	go func(pid int) { _ = s.refreshProductOrdersCache(pid) }(productID)
+	select {
+	case s.cacheWorker <- productID:
+	default:
+		go func(pid int) { _ = s.refreshProductOrdersCache(pid) }(productID)
+	}
 
 	event := map[string]interface{}{
 		"orderId":   order.ID,
@@ -150,6 +194,7 @@ func (s *OrderService) handleOrderUpdated(body []byte) {
 		log.Println("FAILED to decode order.updated:", err)
 		return
 	}
+
 	reqID := msg.RequestID
 	if reqID == "" {
 		reqID = "no-request-id"
@@ -160,8 +205,10 @@ func (s *OrderService) handleOrderUpdated(body []byte) {
 		return
 	}
 
-	if err := s.refreshProductOrdersCache(msg.ProductID); err != nil {
-		log.Printf("[RequestID: %s] FAILED to refresh cache: %v", reqID, err)
+	select {
+	case s.cacheWorker <- msg.ProductID:
+	default:
+		go func(pid int) { _ = s.refreshProductOrdersCache(pid) }(msg.ProductID)
 	}
 
 	log.Printf("[RequestID: %s] Order %d updated to '%s'", reqID, msg.OrderID, msg.Status)
@@ -196,5 +243,6 @@ func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, err
 
 func (s *OrderService) Close() {
 	close(s.rmqWorkerPool)
+	close(s.cacheWorker)
 	s.wg.Wait()
 }

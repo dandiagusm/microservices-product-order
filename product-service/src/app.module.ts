@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductsModule } from './products/products.module';
 import { CommonModule } from './common/common.module';
+import { Product } from './products/entities/product.entity';
 
 @Module({
   imports: [
@@ -15,8 +16,11 @@ import { CommonModule } from './common/common.module';
         username: process.env.DB_USER ?? 'postgres',
         password: process.env.DB_PASSWORD ?? 'postgres',
         database: process.env.DB_NAME ?? 'productdb',
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        entities: [Product],
         synchronize: true,
+        extra: {
+          max: 50, // connection pool size for high concurrency
+        },
       }),
     }),
     CommonModule,
