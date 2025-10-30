@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/domain"
@@ -20,14 +21,38 @@ type OrderService struct {
 	Cache             *cache.RedisClient
 	RMQ               *messaging.Publisher
 	ProductServiceURL string
+	HttpClient        *http.Client
+
+	rmqWorkerPool chan map[string]interface{}
+	wg            sync.WaitGroup
 }
 
+const RMQWorkerCount = 20
+
 func NewOrderService(pg *db.PostgresDB, r *cache.RedisClient, rmq *messaging.Publisher, productURL string) *OrderService {
-	return &OrderService{
+	s := &OrderService{
 		Db:                pg,
 		Cache:             r,
 		RMQ:               rmq,
 		ProductServiceURL: productURL,
+		HttpClient:        &http.Client{Timeout: 2 * time.Second},
+		rmqWorkerPool:     make(chan map[string]interface{}, 1000),
+	}
+
+	for i := 0; i < RMQWorkerCount; i++ {
+		s.wg.Add(1)
+		go s.rmqWorker()
+	}
+
+	return s
+}
+
+func (s *OrderService) rmqWorker() {
+	defer s.wg.Done()
+	for event := range s.rmqWorkerPool {
+		if err := s.RMQ.Publish("order.created", event); err != nil {
+			log.Printf("[RequestID: %v] FAILED to publish order.created: %v", event["requestId"], err)
+		}
 	}
 }
 
@@ -41,32 +66,14 @@ type productResponse struct {
 func (s *OrderService) CreateOrder(ctx context.Context, productID, quantity int) (*domain.Order, error) {
 	requestID := middleware.GetRequestID(ctx)
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/products/%d", s.ProductServiceURL, productID), nil)
+	product, err := s.fetchProduct(productID, requestID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-
-	req.Header.Set("X-Request-ID", requestID)
-	client := &http.Client{Timeout: 5 * time.Second}
-
-	res, err := client.Do(req)
-	if err != nil || res.StatusCode != http.StatusOK {
-		log.Printf("[RequestID: %s] FAILED to fetch product %d: %v", requestID, productID, err)
-		return nil, fmt.Errorf("product not found")
-	}
-	defer res.Body.Close()
-
-	var prod productResponse
-	if err := json.NewDecoder(res.Body).Decode(&prod); err != nil {
-		log.Printf("[RequestID: %s] FAILED to decode product response: %v", requestID, err)
-		return nil, fmt.Errorf("failed to decode product")
-	}
-
-	log.Printf("[RequestID: %s] Product %d fetched successfully", requestID, productID)
 
 	order := &domain.Order{
 		ProductID:  productID,
-		TotalPrice: float64(quantity) * prod.Price,
+		TotalPrice: float64(quantity) * product.Price,
 		Status:     "waiting",
 		CreatedAt:  time.Now(),
 	}
@@ -76,11 +83,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, productID, quantity int)
 		return nil, err
 	}
 
-	log.Printf("[RequestID: %s] Order %d created successfully", requestID, order.ID)
-
-	if err := s.refreshProductOrdersCache(productID); err != nil {
-		log.Printf("[RequestID: %s] FAILED to refresh cache: %v", requestID, err)
-	}
+	go func(pid int) { _ = s.refreshProductOrdersCache(pid) }(productID)
 
 	event := map[string]interface{}{
 		"orderId":   order.ID,
@@ -88,51 +91,80 @@ func (s *OrderService) CreateOrder(ctx context.Context, productID, quantity int)
 		"quantity":  quantity,
 		"status":    order.Status,
 		"createdAt": order.CreatedAt,
-		"requestId": requestID, // consistent key
+		"requestId": requestID,
 	}
 
-	if err := s.RMQ.Publish("order.created", event); err != nil {
-		log.Printf("[RequestID: %s] FAILED to publish order.created: %v", requestID, err)
-	} else {
-		log.Printf("[RequestID: %s] PUBLISHED order.created → orderId=%d productId=%d", requestID, order.ID, order.ProductID)
+	select {
+	case s.rmqWorkerPool <- event:
+	default:
+		go func() { _ = s.RMQ.Publish("order.created", event) }()
 	}
 
+	log.Printf("[RequestID: %s] Order %d created successfully", requestID, order.ID)
 	return order, nil
+}
+
+func (s *OrderService) fetchProduct(productID int, requestID string) (*productResponse, error) {
+	cacheKey := fmt.Sprintf("product:%d", productID)
+	if data, err := s.Cache.Get(cacheKey); err == nil && data != nil {
+		var prod productResponse
+		if err := json.Unmarshal(data, &prod); err == nil {
+			return &prod, nil
+		}
+	}
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/products/%d", s.ProductServiceURL, productID), nil)
+	req.Header.Set("X-Request-ID", requestID)
+	res, err := s.HttpClient.Do(req)
+	if err != nil || res.StatusCode != http.StatusOK {
+		log.Printf("[RequestID: %s] FAILED to fetch product %d: %v", requestID, productID, err)
+		return nil, fmt.Errorf("product not found")
+	}
+	defer res.Body.Close()
+
+	var prod productResponse
+	if err := json.NewDecoder(res.Body).Decode(&prod); err != nil {
+		return nil, fmt.Errorf("failed to decode product")
+	}
+
+	go func() { _ = s.Cache.Set(cacheKey, prod, 300) }()
+	return &prod, nil
 }
 
 func (s *OrderService) ListenOrderUpdated() error {
 	return s.RMQ.Subscribe("order.updated", func(body []byte) {
-		var msg struct {
-			OrderID   int    `json:"orderId"`
-			ProductID int    `json:"productId"`
-			Status    string `json:"status"`
-			UpdatedAt string `json:"updatedAt"`
-			RequestID string `json:"requestId"` // consistent key
-		}
-
-		if err := json.Unmarshal(body, &msg); err != nil {
-			log.Println("FAILED to decode order.updated:", err)
-			return
-		}
-
-		reqID := msg.RequestID
-		if reqID == "" {
-			reqID = "no-request-id"
-		}
-
-		log.Printf("[RequestID: %s] RECEIVED order.updated: %+v", reqID, msg)
-
-		if err := s.Db.UpdateOrderStatus(msg.OrderID, msg.Status); err != nil {
-			log.Printf("[RequestID: %s] FAILED to update order %d: %v", reqID, msg.OrderID, err)
-			return
-		}
-
-		if err := s.refreshProductOrdersCache(msg.ProductID); err != nil {
-			log.Printf("[RequestID: %s] FAILED to refresh cache: %v", reqID, err)
-		}
-
-		log.Printf("[RequestID: %s] Order %d updated to '%s'", reqID, msg.OrderID, msg.Status)
+		go s.handleOrderUpdated(body)
 	})
+}
+
+func (s *OrderService) handleOrderUpdated(body []byte) {
+	var msg struct {
+		OrderID   int    `json:"orderId"`
+		ProductID int    `json:"productId"`
+		Status    string `json:"status"`
+		UpdatedAt string `json:"updatedAt"`
+		RequestID string `json:"requestId"`
+	}
+
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Println("FAILED to decode order.updated:", err)
+		return
+	}
+	reqID := msg.RequestID
+	if reqID == "" {
+		reqID = "no-request-id"
+	}
+
+	if err := s.Db.UpdateOrderStatus(msg.OrderID, msg.Status); err != nil {
+		log.Printf("[RequestID: %s] FAILED to update order %d: %v", reqID, msg.OrderID, err)
+		return
+	}
+
+	if err := s.refreshProductOrdersCache(msg.ProductID); err != nil {
+		log.Printf("[RequestID: %s] FAILED to refresh cache: %v", reqID, err)
+	}
+
+	log.Printf("[RequestID: %s] Order %d updated to '%s'", reqID, msg.OrderID, msg.Status)
 }
 
 func (s *OrderService) refreshProductOrdersCache(productID int) error {
@@ -158,9 +190,11 @@ func (s *OrderService) GetOrdersByProductID(productID int) ([]*domain.Order, err
 		return nil, err
 	}
 
-	if err := s.Cache.Set(cacheKey, orders, 60); err != nil {
-		log.Printf("FAILED to set cache: %v", err)
-	}
-
+	_ = s.Cache.Set(cacheKey, orders, 60)
 	return orders, nil
+}
+
+func (s *OrderService) Close() {
+	close(s.rmqWorkerPool)
+	s.wg.Wait()
 }
