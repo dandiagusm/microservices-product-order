@@ -11,6 +11,7 @@ import (
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/cache"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/db"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/messaging"
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/middleware"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
 )
 
@@ -65,10 +66,11 @@ func main() {
 	wg.Wait()
 	log.Println("RabbitMQ subscriptions READY")
 
-	// Start HTTP server
 	router := controller.NewRouter(orderService)
+	handler := middleware.RequestIDMiddleware(router)
+
 	log.Printf("Order service LISTENING on port %d", port)
-	if err := http.ListenAndServe(":"+strconv.Itoa(port), router); err != nil {
+	if err := http.ListenAndServe(":"+strconv.Itoa(port), handler); err != nil {
 		log.Fatalf("FAILED to start server: %v", err)
 	}
 }

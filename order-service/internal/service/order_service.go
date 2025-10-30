@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/cache"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/db"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/infra/messaging"
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/middleware"
 )
 
 type OrderService struct {
@@ -36,21 +38,31 @@ type productResponse struct {
 	Qty   int     `json:"qty"`
 }
 
-func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, error) {
-	res, err := http.Get(fmt.Sprintf("%s/products/%d", s.ProductServiceURL, productID))
-	if err != nil || res.StatusCode != 200 {
+func (s *OrderService) CreateOrder(ctx context.Context, productID, quantity int) (*domain.Order, error) {
+	requestID := middleware.GetRequestID(ctx)
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/products/%d", s.ProductServiceURL, productID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("X-Request-ID", requestID)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	res, err := client.Do(req)
+	if err != nil || res.StatusCode != http.StatusOK {
+		log.Printf("[RequestID: %s] FAILED to fetch product %d: %v", requestID, productID, err)
 		return nil, fmt.Errorf("product not found")
 	}
 	defer res.Body.Close()
 
 	var prod productResponse
 	if err := json.NewDecoder(res.Body).Decode(&prod); err != nil {
+		log.Printf("[RequestID: %s] FAILED to decode product response: %v", requestID, err)
 		return nil, fmt.Errorf("failed to decode product")
 	}
 
-	// if prod.Qty < quantity {
-	// 	return nil, fmt.Errorf("insufficient stock")
-	// }
+	log.Printf("[RequestID: %s] Product %d fetched successfully", requestID, productID)
 
 	order := &domain.Order{
 		ProductID:  productID,
@@ -60,11 +72,14 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 	}
 
 	if err := s.Db.CreateOrder(order); err != nil {
+		log.Printf("[RequestID: %s] FAILED to create order: %v", requestID, err)
 		return nil, err
 	}
 
+	log.Printf("[RequestID: %s] Order %d created successfully", requestID, order.ID)
+
 	if err := s.refreshProductOrdersCache(productID); err != nil {
-		log.Printf("FAILED to refresh cache: %v", err)
+		log.Printf("[RequestID: %s] FAILED to refresh cache: %v", requestID, err)
 	}
 
 	event := map[string]interface{}{
@@ -73,12 +88,13 @@ func (s *OrderService) CreateOrder(productID, quantity int) (*domain.Order, erro
 		"quantity":  quantity,
 		"status":    order.Status,
 		"createdAt": order.CreatedAt,
+		"requestId": requestID, // consistent key
 	}
 
 	if err := s.RMQ.Publish("order.created", event); err != nil {
-		log.Println("FAILED to publish order.created:", err)
+		log.Printf("[RequestID: %s] FAILED to publish order.created: %v", requestID, err)
 	} else {
-		log.Printf("PUBLISHED order.created → orderId=%d productId=%d", order.ID, order.ProductID)
+		log.Printf("[RequestID: %s] PUBLISHED order.created → orderId=%d productId=%d", requestID, order.ID, order.ProductID)
 	}
 
 	return order, nil
@@ -91,6 +107,7 @@ func (s *OrderService) ListenOrderUpdated() error {
 			ProductID int    `json:"productId"`
 			Status    string `json:"status"`
 			UpdatedAt string `json:"updatedAt"`
+			RequestID string `json:"requestId"` // consistent key
 		}
 
 		if err := json.Unmarshal(body, &msg); err != nil {
@@ -98,18 +115,23 @@ func (s *OrderService) ListenOrderUpdated() error {
 			return
 		}
 
-		log.Printf("RECEIVED order.updated: %+v", msg)
+		reqID := msg.RequestID
+		if reqID == "" {
+			reqID = "no-request-id"
+		}
+
+		log.Printf("[RequestID: %s] RECEIVED order.updated: %+v", reqID, msg)
 
 		if err := s.Db.UpdateOrderStatus(msg.OrderID, msg.Status); err != nil {
-			log.Printf("FAILED to update order %d: %v", msg.OrderID, err)
+			log.Printf("[RequestID: %s] FAILED to update order %d: %v", reqID, msg.OrderID, err)
 			return
 		}
 
 		if err := s.refreshProductOrdersCache(msg.ProductID); err != nil {
-			log.Printf("FAILED to refresh cache: %v", err)
+			log.Printf("[RequestID: %s] FAILED to refresh cache: %v", reqID, err)
 		}
 
-		log.Printf("Order %d updated to '%s'", msg.OrderID, msg.Status)
+		log.Printf("[RequestID: %s] Order %d updated to '%s'", reqID, msg.OrderID, msg.Status)
 	})
 }
 

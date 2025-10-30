@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/dandiagusm/microservices-product-order/order-service/internal/middleware"
 	"github.com/dandiagusm/microservices-product-order/order-service/internal/service"
-
 	"github.com/gorilla/mux"
 )
 
@@ -24,6 +24,10 @@ func (c *OrderController) Routes(r *mux.Router) {
 }
 
 func (c *OrderController) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	requestID := middleware.GetRequestID(r.Context())
+	w.Header().Set("X-Request-ID", requestID)
+	w.Header().Set("Content-Type", "application/json")
+
 	var req struct {
 		ProductID int `json:"productId"`
 		Quantity  int `json:"quantity"`
@@ -33,21 +37,28 @@ func (c *OrderController) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := c.Service.CreateOrder(req.ProductID, req.Quantity)
+	order, err := c.Service.CreateOrder(r.Context(), req.ProductID, req.Quantity)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	json.NewEncoder(w).Encode(order)
 }
 
 func (c *OrderController) GetOrdersByProduct(w http.ResponseWriter, r *http.Request) {
+	requestID := middleware.GetRequestID(r.Context())
+	w.Header().Set("X-Request-ID", requestID)
+	w.Header().Set("Content-Type", "application/json")
+
 	idStr := mux.Vars(r)["id"]
 	id, _ := strconv.Atoi(idStr)
+
 	orders, err := c.Service.GetOrdersByProductID(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	json.NewEncoder(w).Encode(orders)
 }

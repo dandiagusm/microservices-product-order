@@ -20,7 +20,6 @@ type Publisher struct {
 	isClosed    bool
 }
 
-// NewPublisher connects to RabbitMQ, declares exchange
 func NewPublisher(url, exchange, serviceName string) (*Publisher, error) {
 	p := &Publisher{url: url, exchange: exchange, serviceName: serviceName}
 	if err := p.connect(); err != nil {
@@ -61,10 +60,15 @@ func (p *Publisher) connect() error {
 }
 
 func (p *Publisher) reconnectWatcher() {
-	errChan := make(chan *amqp.Error)
-	p.conn.NotifyClose(errChan)
+	for {
+		if p.conn == nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
-	for err := range errChan {
+		errChan := make(chan *amqp.Error)
+		p.conn.NotifyClose(errChan)
+		err := <-errChan
 		if err != nil {
 			log.Printf("RabbitMQ connection closed: %v. Reconnecting...", err)
 			for {
@@ -79,13 +83,17 @@ func (p *Publisher) reconnectWatcher() {
 	}
 }
 
-// Publish marshals data inside, no Base64
-func (p *Publisher) Publish(routingKey string, data interface{}) error {
+// Publish marshals data, optionally inject requestId
+func (p *Publisher) Publish(routingKey string, data map[string]interface{}, requestId ...string) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	if p.channel == nil {
 		return fmt.Errorf("channel not initialized")
+	}
+
+	if len(requestId) > 0 {
+		data["requestId"] = requestId[0]
 	}
 
 	body, err := json.Marshal(data)
@@ -109,11 +117,10 @@ func (p *Publisher) Publish(routingKey string, data interface{}) error {
 		return fmt.Errorf("FAILED to publish: %v", err)
 	}
 
-	log.Printf("Message PUBLISHED to exchange '%s' with key '%s'", p.exchange, routingKey)
+	log.Printf("[RequestID: %s] Message PUBLISHED to exchange '%s' with key '%s'", data["requestId"], p.exchange, routingKey)
 	return nil
 }
 
-// Subscribe binds a durable queue per service and routing key
 func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -122,7 +129,7 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 		return fmt.Errorf("channel not initialized")
 	}
 
-	queueName := fmt.Sprintf("%s-%s", p.serviceName, routingKey) // unique per service
+	queueName := fmt.Sprintf("%s.%s", routingKey, p.serviceName) // consistent with NestJS
 	_, err := p.channel.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("queue declare FAILED: %v", err)
@@ -148,12 +155,26 @@ func (p *Publisher) Subscribe(routingKey string, handler func([]byte)) error {
 						m.Nack(false, true)
 					}
 				}()
-				handler(m.Body)
-				m.Ack(false)
+				if err := safeHandler(handler, m.Body); err != nil {
+					m.Nack(false, true)
+				} else {
+					m.Ack(false)
+				}
 			}(msg)
 		}
 	}()
 
+	return nil
+}
+
+// wrapper to catch panics in handler
+func safeHandler(h func([]byte), body []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("handler panic: %v", r)
+		}
+	}()
+	h(body)
 	return nil
 }
 
@@ -168,5 +189,5 @@ func (p *Publisher) Close() {
 	if p.conn != nil {
 		_ = p.conn.Close()
 	}
-	log.Println("🔌 RabbitMQ connection CLOSED")
+	log.Println("RabbitMQ connection CLOSED")
 }

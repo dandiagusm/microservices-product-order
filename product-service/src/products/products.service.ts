@@ -26,7 +26,8 @@ export class ProductsService implements OnModuleInit {
     await this.publisher.ready;
 
     await this.publisher.subscribe('order.created', async (order: any) => {
-      const requestId = order.requestId ?? 'N/A';
+      const requestId: string = order.requestId ?? 'N/A';
+
       try {
         const { orderId, productId, quantity } = order;
         if (!productId || !quantity) {
@@ -45,7 +46,7 @@ export class ProductsService implements OnModuleInit {
           productId,
           status: 'done',
           updatedAt: new Date().toISOString(),
-          requestId,
+          requestId, // consistent key
         });
 
         this.logger.log(`[RequestID: ${requestId}] Published order.updated for order ${orderId}`);
