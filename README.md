@@ -18,6 +18,16 @@ This will start all microservices and dependencies:
 
 ---
 
+## API Request
+Go to `docs/` folder and get / import `Product Order.postman_collection.json` into `Postman`
+or
+Go to
+```
+
+---
+
+https://documenter.getpostman.com/view/9425838/2sB3Wnx2vC
+```
 ## Access Redis Containers
 Make request first to fill the data needed (Create and Get)
 ### Product Redis
@@ -137,12 +147,3 @@ All client requests first pass through the **API Gateway**, which acts as a unif
 3. **Order Service Reaction**  
    - The `order-service` listens for the `order.updated` event.  
    - Upon receiving it, the order status is updated to `done` in the order database, and the cache is refreshed if necessary.  
-
-
-# API Request
-Go to `docs/` folder and get / import `Product Order.postman_collection.json` into `Postman`
-or
-Go to
-```
-https://documenter.getpostman.com/view/9425838/2sB3Wnx2vC
-```
