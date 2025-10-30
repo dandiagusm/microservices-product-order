@@ -79,7 +79,7 @@ export class RabbitmqPublisher implements OnModuleInit {
     await this.ready;
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
 
-    const serviceName = process.env.SERVICE_NAME || 'product-service';
+    const serviceName = 'product-service';
     const queueName = `${routingKey}.${serviceName}`;
 
     await this.channel.assertQueue(queueName, { durable: true });

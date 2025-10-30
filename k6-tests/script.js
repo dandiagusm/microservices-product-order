@@ -33,7 +33,7 @@ export const options = {
 
 const BASE_URL = "http://order-service:3002/orders";
 
-const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || "2");
+const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || "1");
 
 export default function () {
   const payload = JSON.stringify({ productId: PRODUCT_ID, quantity: 1 });

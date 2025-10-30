@@ -65,10 +65,36 @@ docker compose exec k6 k6 run /scripts/script.js
 ### Example Test Output
 
 ```
-checks_total.......: 44248
-http_req_failed....: 65.43%
-http_req_duration..: p(95)=15.71s
+  █ THRESHOLDS
+    errors
+    ✗ 'count<1000' count=1794
+    http_req_duration
+    ✓ 'p(95)<1000' p(95)=23.66ms
+    http_req_failed
+    ✓ 'rate<0.05' rate=0.00%
+    latency_ms
+    ✓ 'p(95)<1000' p(95)=23.663825
+
+  █ TOTAL RESULTS
+    checks_total.......: 164834 1176.908139/s
+    checks_succeeded...: 98.91% 163040 out of 164834
+    checks_failed......: 1.08%  1794 out of 164834
+
+    ✓ status is 200
+    ✗ duration < 1s
+      ↳  97% — ✓ 80623 / ✗ 1794
+
+    CUSTOM
+    errors.........................: 1794  12.809088/s
+    latency_ms.....................: avg=257.251492 min=1.914971 med=3.996582 max=46675.317678 p(90)=10.918569 p(95)=23.663825
+
+    HTTP
+    http_req_duration..............: avg=257.25ms   min=1.91ms   med=3.99ms   max=46.67s       p(90)=10.91ms   p(95)=23.66ms
+      { expected_response:true }...: avg=257.25ms   min=1.91ms   med=3.99ms   max=46.67s       p(90)=10.91ms   p(95)=23.66ms
+    http_req_failed................: 0.00% 0 out of 82417
+    http_reqs......................: 82417 588.45407/s
 ```
+Based on http_reqs, RPS (Requests per second) is 588
 
 # Architecture Explanation
 
