@@ -23,9 +23,6 @@ Go to `docs/` folder and get / import `Product Order.postman_collection.json` in
 or
 Go to
 ```
-
----
-
 https://documenter.getpostman.com/view/9425838/2sB3Wnx2vC
 ```
 ## Access Redis Containers
