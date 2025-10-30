@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as amqp from 'amqplib';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class RabbitmqPublisher implements OnModuleInit {
@@ -27,10 +28,12 @@ export class RabbitmqPublisher implements OnModuleInit {
     const connect = async () => {
       try {
         this.connection = await amqp.connect(rabbitUrl);
+
         this.connection.on('close', () => {
           this.logger.warn('RabbitMQ connection CLOSED. Reconnecting...');
           setTimeout(connect, 5000);
         });
+
         this.connection.on('error', (err) => {
           this.logger.error('RabbitMQ connection ERROR:', err);
         });
@@ -49,18 +52,26 @@ export class RabbitmqPublisher implements OnModuleInit {
     await connect();
   }
 
-  async publish(routingKey: string, data: any) {
+  async publish(routingKey: string, data: any, requestId?: string) {
     await this.ready;
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
+
+    const message = {
+      ...data,
+      requestId: requestId || data?.requestId || this.generateRequestId(),
+      timestamp: new Date().toISOString(),
+    };
 
     this.channel.publish(
       this.EXCHANGE,
       routingKey,
-      Buffer.from(JSON.stringify(data)),
-      { persistent: true },
+      Buffer.from(JSON.stringify(message)),
+      { persistent: true, contentType: 'application/json' },
     );
 
-    this.logger.log(`[${routingKey}] PUBLISHED: ${JSON.stringify(data)}`);
+    this.logger.log(
+      `[RequestID: ${message.requestId}] [${routingKey}] PUBLISHED: ${JSON.stringify(data)}`,
+    );
   }
 
   async subscribe(
@@ -70,7 +81,6 @@ export class RabbitmqPublisher implements OnModuleInit {
     await this.ready;
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
 
-    // Dedicated queue per service + routing key
     const serviceName = process.env.SERVICE_NAME || 'product-service';
     const queueName = `${routingKey}.${serviceName}`;
 
@@ -83,8 +93,12 @@ export class RabbitmqPublisher implements OnModuleInit {
 
     this.channel.consume(queueName, async (msg) => {
       if (!msg) return;
+
       try {
         const content = JSON.parse(msg.content.toString());
+        const reqId = content.requestId || 'N/A';
+        this.logger.log(`[RequestID: ${reqId}] RECEIVED: ${routingKey}`);
+
         await callback(content);
         this.channel.ack(msg);
       } catch (err) {
@@ -99,7 +113,13 @@ export class RabbitmqPublisher implements OnModuleInit {
       if (this.channel) await this.channel.close();
       if (this.connection) await this.connection.close();
     } catch (err) {
-      this.logger.warn('⚠️ Error closing RabbitMQ', err);
+      this.logger.warn('Error closing RabbitMQ', err);
     }
+  }
+
+  private generateRequestId(): string {
+    return crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 12);
   }
 }

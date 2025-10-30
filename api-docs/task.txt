@@ -31,3 +31,14 @@ API Gateway
 Microservices (Order, Product, etc.)
    - Business logic validation
    - Internal error handling & panic recovery
+
+
+
+    // Emit product.created event
+    // await this.publisher.publish(EVENTS.PRODUCT_CREATED, {
+    //   id: saved.id,
+    //   name: saved.name,
+    //   price: saved.price,
+    //   qty: saved.qty,
+    //   createdAt: saved.createdAt,
+    // });

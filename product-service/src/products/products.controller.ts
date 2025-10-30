@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Req } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 
@@ -7,12 +7,14 @@ export class ProductsController {
   constructor(private readonly service: ProductsService) {}
 
   @Post()
-  async create(@Body() dto: CreateProductDto) {
-    return this.service.create(dto);
+  async create(@Body() dto: CreateProductDto, @Req() req: any) {
+    const requestId = req.headers['x-request-id'];
+    return this.service.create(dto, requestId);
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string) {
-    return this.service.findById(parseInt(id, 10));
+  async findById(@Param('id') id: string, @Req() req: any) {
+    const requestId = req.headers['x-request-id'];
+    return this.service.findById(parseInt(id, 10), requestId);
   }
 }

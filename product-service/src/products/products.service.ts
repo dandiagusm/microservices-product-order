@@ -10,7 +10,6 @@ import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { RedisCacheService } from '../common/utils/redis.util';
 import { RabbitmqPublisher } from '../common/utils/rabbitmq.publisher';
-import { EVENTS } from '../common/constants/events';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
@@ -26,88 +25,95 @@ export class ProductsService implements OnModuleInit {
   async onModuleInit() {
     await this.publisher.ready;
 
-    // Subscribe to order.created events
     await this.publisher.subscribe('order.created', async (order: any) => {
+      const requestId = order.requestId ?? 'N/A';
       try {
         const { orderId, productId, quantity } = order;
         if (!productId || !quantity) {
-          this.logger.error('❌ Invalid order message received', order);
+          this.logger.error(`[RequestID: ${requestId}] Invalid order message`, order);
           return;
         }
 
-        const updated = await this.reduceQty(productId, quantity);
+        const updated = await this.reduceQty(productId, quantity, requestId);
 
         this.logger.log(
-          `✅ Reduced product ${productId} qty by ${quantity}. Remaining: ${updated.qty}`,
+          `[RequestID: ${requestId}] Reduced product ${productId} qty by ${quantity}. Remaining: ${updated.qty}`,
         );
 
-        // Emit order.updated
         await this.publisher.publish('order.updated', {
           orderId,
           productId,
           status: 'done',
           updatedAt: new Date().toISOString(),
+          requestId,
         });
 
-        this.logger.log(`📤 Published order.updated for order ${orderId}`);
+        this.logger.log(`[RequestID: ${requestId}] Published order.updated for order ${orderId}`);
       } catch (err) {
-        this.logger.error('❌ Failed to handle order.created', err);
+        this.logger.error(`[RequestID: ${requestId}] Failed to handle order.created`, err);
       }
     });
   }
 
-  async create(dto: CreateProductDto) {
+  async create(dto: CreateProductDto, requestId?: string) {
     const product = this.repo.create(dto);
     const saved = await this.repo.save(product);
 
-    // Emit product.created event
-    await this.publisher.publish(EVENTS.PRODUCT_CREATED, {
-      id: saved.id,
-      name: saved.name,
-      price: saved.price,
-      qty: saved.qty,
-      createdAt: saved.createdAt,
-    });
+    this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Created product ${saved.id} (${saved.name})`);
 
-    await this.refreshCache(saved.id);
+    await this.refreshCache(saved.id, requestId);
     return saved;
   }
 
-  async findById(id: number) {
+  async findById(id: number, requestId?: string) {
     const key = `product:${id}`;
     const cached = await this.redis.get<Product>(key);
-    if (cached) return cached;
+    if (cached) {
+      this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Cache hit for product:${id}`);
+      return cached;
+    }
 
     const product = await this.repo.findOne({ where: { id } });
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) {
+      this.logger.warn(`[RequestID: ${requestId ?? 'N/A'}] Product not found: ${id}`);
+      throw new NotFoundException('Product not found');
+    }
 
     await this.redis.set(key, product, 600);
+    this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Cache miss → fetched product:${id}`);
     return product;
   }
 
-  async reduceQty(id: number, delta: number) {
+  async reduceQty(id: number, delta: number, requestId?: string) {
     const product = await this.repo.findOne({ where: { id } });
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) {
+      this.logger.warn(`[RequestID: ${requestId ?? 'N/A'}] Product not found: ${id}`);
+      throw new NotFoundException('Product not found');
+    }
 
     product.qty = Math.max(0, product.qty - delta);
     const updated = await this.repo.save(product);
 
-    await this.refreshCache(id);
+    this.logger.log(
+      `[RequestID: ${requestId ?? 'N/A'}] Reduced qty for product:${id} by ${delta}. Remaining: ${updated.qty}`,
+    );
+
+    await this.refreshCache(id, requestId);
     return updated;
   }
 
-  private async refreshCache(id: number) {
+  private async refreshCache(id: number, requestId?: string) {
     try {
       const product = await this.repo.findOne({ where: { id } });
       if (product) {
         await this.redis.set(`product:${id}`, product, 600);
-        this.logger.debug(`🔄 Cache refreshed for product:${id}`);
+        this.logger.debug(`[RequestID: ${requestId ?? 'N/A'}] Cache refreshed for product:${id}`);
       } else {
         await this.redis.del(`product:${id}`);
-        this.logger.debug(`🗑️ Cache deleted for product:${id}`);
+        this.logger.debug(`[RequestID: ${requestId ?? 'N/A'}] Cache deleted for product:${id}`);
       }
     } catch (err) {
-      this.logger.warn(`⚠️ Cache refresh failed for product:${id}`, err);
+      this.logger.warn(`[RequestID: ${requestId ?? 'N/A'}] Cache refresh failed for product:${id}`, err);
     }
   }
 }
