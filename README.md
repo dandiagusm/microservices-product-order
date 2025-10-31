@@ -1,5 +1,7 @@
-# Microservices Product & Order System
+# VIDEO
+Please check the video_url in docs folder or go directly to [Link Video](https://drive.google.com/file/d/1mSTbEGRmQELOfolM7sGasJ4XAOooAlWq/view?usp=sharing)
 
+# Microservices Product & Order System
 ## Run Locally with Docker
 
 1. Make .env from .env.example in each folder services
@@ -21,10 +23,8 @@ This will start all microservices and dependencies:
 ## API Request
 Go to `docs/` folder and get / import `Product Order.postman_collection.json` into `Postman`
 or
-Go to
-```
-https://documenter.getpostman.com/view/9425838/2sB3WnxMs8
-```
+Go to [Link Postman](https://documenter.getpostman.com/view/9425838/2sB3WnxMs8)
+
 ---
 
 ## Access Redis Containers
