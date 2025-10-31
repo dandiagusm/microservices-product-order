@@ -1,5 +1,6 @@
+# VIDEO
+Please check the video_url in docs folder or go directly to [[Link Text](https://drive.google.com/drive/folders/1FsDZ5AKu9fj6qypcXvC4qy4hTH6fenEm?hl=id)](https://drive.google.com/drive/folders/1FsDZ5AKu9fj6qypcXvC4qy4hTH6fenEm?hl=id)
 # Microservices Product & Order System
-
 ## Run Locally with Docker
 
 1. Make .env from .env.example in each folder services
