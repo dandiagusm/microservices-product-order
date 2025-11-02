@@ -25,43 +25,45 @@ export class ProductsService implements OnModuleInit {
   async onModuleInit() {
     await this.publisher.ready;
 
-    // subscribe to order.created 
-    await this.publisher.subscribe('order.created', async (order: any) => {
-      const requestId: string = order.requestId ?? 'N/A';
+    // 🔥 Subscribe with 10 workers, prefetch 20 messages each
+    await this.publisher.subscribe(
+      'order.created',
+      async (order: any) => {
+        const requestId = order.requestId ?? 'N/A';
+        try {
+          const { orderId, productId, quantity } = order;
+          if (!productId || !quantity) {
+            this.logger.error(`[RequestID: ${requestId}] Invalid order message`, order);
+            return;
+          }
 
-      try {
-        const { orderId, productId, quantity } = order;
-        if (!productId || !quantity) {
-          this.logger.error(`[RequestID: ${requestId}] Invalid order message`, order);
-          return;
+          const updated = await this.reduceQty(productId, quantity, requestId);
+
+          this.logger.log(
+            `[RequestID: ${requestId}] Reduced product ${productId} qty by ${quantity}. Remaining: ${updated.qty}`,
+          );
+
+          await this.publisher.publish('order.updated', {
+            orderId,
+            productId,
+            status: 'done',
+            updatedAt: new Date().toISOString(),
+            requestId,
+          });
+
+          this.logger.log(`[RequestID: ${requestId}] Published order.updated for order ${orderId}`);
+        } catch (err) {
+          this.logger.error(`[RequestID: ${requestId}] Failed to handle order.created`, err);
         }
-
-        const updated = await this.reduceQty(productId, quantity, requestId);
-
-        this.logger.log(
-          `[RequestID: ${requestId}] Reduced product ${productId} qty by ${quantity}. Remaining: ${updated.qty}`,
-        );
-
-        await this.publisher.publish('order.updated', {
-          orderId,
-          productId,
-          status: 'done',
-          updatedAt: new Date().toISOString(),
-          requestId,
-        });
-
-        this.logger.log(`[RequestID: ${requestId}] Published order.updated for order ${orderId}`);
-      } catch (err) {
-        this.logger.error(`[RequestID: ${requestId}] Failed to handle order.created`, err);
-      }
-    });
+      },
+      { consumers: 10, prefetch: 20 },
+    );
   }
 
   async create(dto: CreateProductDto, requestId?: string) {
     const product = this.repo.create(dto);
     const saved = await this.repo.save(product);
 
-    // Emit product.created event
     await this.publisher.publish('product.created', {
       id: saved.id,
       name: saved.name,
@@ -80,7 +82,7 @@ export class ProductsService implements OnModuleInit {
     const key = `product:${id}`;
     const cached = await this.redis.get<Product>(key);
     if (cached) {
-      this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Cache hit for product:${id}`);
+      this.logger.debug(`[RequestID: ${requestId ?? 'N/A'}] Cache hit for product:${id}`);
       return cached;
     }
 
@@ -91,7 +93,7 @@ export class ProductsService implements OnModuleInit {
     }
 
     this.redis.set(key, product, 600).catch((err) => this.logger.warn(err));
-    this.logger.log(`[RequestID: ${requestId ?? 'N/A'}] Cache miss → fetched product:${id}`);
+    this.logger.debug(`[RequestID: ${requestId ?? 'N/A'}] Cache miss → fetched product:${id}`);
     return product;
   }
 
