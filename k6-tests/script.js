@@ -7,41 +7,48 @@ const latencyTrend = new Trend("latency_ms");
 
 export const options = {
   scenarios: {
-    high_load: {
-      executor: "ramping-arrival-rate", // gradually ramp to avoid massive initial spike
-      startRate: 200,                   // start at 200 RPS
+    mixed_load: {
+      executor: "ramping-arrival-rate",
+      startRate: 200,                   // Start at 200 RPS
       timeUnit: "1s",
-      preAllocatedVUs: 500,             // initial VUs
-      maxVUs: 1500,                      // auto-scale limit
+      preAllocatedVUs: 500,
+      maxVUs: 1500,
       stages: [
-        { target: 1000, duration: "30s" }, // ramp up to 1000 RPS in 30s
-        { target: 1000, duration: "60s" }, // sustain 1000 RPS for 1 min
-        { target: 0, duration: "20s" },    // ramp down
+        { target: 1000, duration: "30s" },
+        { target: 1000, duration: "60s" },
+        { target: 0, duration: "20s" },
       ],
     },
   },
   thresholds: {
-    http_req_failed: ["rate<0.05"],   // <5% requests fail
-    http_req_duration: ["p(95)<1000"], // 95% requests < 1s
-    errors: ["count<1000"],           // <1000 total errors
-    latency_ms: ["p(95)<1000"],       // custom latency metric
+    http_req_failed: ["rate<0.05"],
+    http_req_duration: ["p(95)<1000"],
+    latency_ms: ["p(95)<1000"],
+    errors: ["count<1000"],
   },
-  discardResponseBodies: true,        // save memory
-  noConnectionReuse: false,           // allow keep-alive
-  userAgent: "k6-load-test/1.0",
+  discardResponseBodies: true,
+  noConnectionReuse: false,
+  userAgent: "k6-mixed-load/1.0",
 };
 
-const BASE_URL = "http://order-service:3002/orders";
-
-const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || "1");
+const BASE_URL = "http://order-service:3002";
+const PRODUCT_IDS = [1, 2, 3, 4, 5]; 
 
 export default function () {
-  const payload = JSON.stringify({ productId: PRODUCT_ID, quantity: 1 });
+  const productId = PRODUCT_IDS[Math.floor(Math.random() * PRODUCT_IDS.length)];
+  const quantity = Math.floor(Math.random() * 5) + 1;
   const headers = { "Content-Type": "application/json" };
 
-  const res = http.post(BASE_URL, payload, { headers });
+  const isCreate = Math.random() <= 1; 
 
-  // Record latency
+  let res;
+  if (isCreate) {
+    const payload = JSON.stringify({ productId, quantity });
+    res = http.post(`${BASE_URL}/orders`, payload, { headers });
+  } else {
+    res = http.get(`${BASE_URL}/orders/product/${productId}`);
+  }
+
   latencyTrend.add(res.timings.duration);
 
   const ok = check(res, {
@@ -51,5 +58,5 @@ export default function () {
 
   if (!ok) errorCount.add(1);
 
-  sleep(0.001); 
+  sleep(0.001);
 }
