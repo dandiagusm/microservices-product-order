@@ -11,14 +11,14 @@ export const options = {
       executor: "constant-arrival-rate",
       rate: 1000,             // 1000 requests per second
       timeUnit: "1s",
-      duration: "1m",         // run for 1 minute
-      preAllocatedVUs: 500,   // enough to handle the target RPS
+      duration: "1m",         
+      preAllocatedVUs: 500,   
       maxVUs: 1000,
     },
   },
   thresholds: {
-    http_req_failed: ["rate<0.05"],  // <5% requests should fail
-    http_req_duration: ["p(95)<1000"], // 95% under 1s
+    http_req_failed: ["rate<0.05"], 
+    http_req_duration: ["p(95)<1000"], 
     latency_ms: ["p(95)<1000"],
     errors: ["count<1000"],
   },
@@ -33,8 +33,8 @@ export default function () {
   const quantity = Math.floor(Math.random() * 5) + 1;
   const headers = { "Content-Type": "application/json" };
 
-  // 80% POST, 20% GET
-  const isCreate = Math.random() < 0.8;
+
+  const isCreate = Math.random() <= 1;
 
   let res;
   if (isCreate) {

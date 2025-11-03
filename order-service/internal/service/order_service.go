@@ -29,8 +29,8 @@ type OrderService struct {
 }
 
 const (
-	RMQWorkerCount    = 20
-	CacheWorkerBatch  = 500 * time.Millisecond
+	RMQWorkerCount    = 100
+	CacheWorkerBatch  = 1000 * time.Millisecond
 	CacheWorkerBuffer = 1000
 )
 

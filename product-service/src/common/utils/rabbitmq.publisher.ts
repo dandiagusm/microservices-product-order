@@ -10,7 +10,7 @@ interface SubscribeOptions {
 @Injectable()
 export class RabbitmqPublisher implements OnModuleInit, OnModuleDestroy {
   private connection: amqp.Connection;
-  private channel: amqp.Channel; // default channel for asserts/publish
+  private channel: amqp.Channel; // control channel
   private readonly logger = new Logger(RabbitmqPublisher.name);
   private readonly EXCHANGE = 'events';
   public ready: Promise<void>;
@@ -30,7 +30,6 @@ export class RabbitmqPublisher implements OnModuleInit, OnModuleDestroy {
     await this.close();
   }
 
-  /** Setup RabbitMQ connection and main channel (with auto-reconnect). */
   private async setupConnection() {
     const rabbitUrl = process.env.RABBITMQ_URL;
     if (!rabbitUrl) throw new Error('RABBITMQ_URL not defined');
@@ -62,8 +61,7 @@ export class RabbitmqPublisher implements OnModuleInit, OnModuleDestroy {
     await connect();
   }
 
-  /** Publish message to topic exchange. */
-  async publish(routingKey: string, data: any, requestId?: string) {
+  async publish(routingKey: string, data: any, requestId?: string): Promise<void> {
     await this.ready;
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
 
@@ -73,20 +71,19 @@ export class RabbitmqPublisher implements OnModuleInit, OnModuleDestroy {
       timestamp: new Date().toISOString(),
     };
 
-    this.channel.publish(
-      this.EXCHANGE,
-      routingKey,
-      Buffer.from(JSON.stringify(message)),
-      { persistent: true, contentType: 'application/json' },
-    );
-
-    this.logger.debug(`[RequestID: ${message.requestId}] [${routingKey}] PUBLISHED`);
+    try {
+      this.channel.publish(
+        this.EXCHANGE,
+        routingKey,
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true, contentType: 'application/json' },
+      );
+      this.logger.debug(`[${routingKey}] [RequestID:${message.requestId}] Published`);
+    } catch (err) {
+      this.logger.error(`Failed to publish ${routingKey}`, err);
+    }
   }
 
-  /**
-   * Subscribe with multiple parallel consumers.
-   * Each consumer uses its own channel and handles messages concurrently.
-   */
   async subscribe(
     routingKey: string,
     callback: (msg: any) => void | Promise<void>,
@@ -95,49 +92,46 @@ export class RabbitmqPublisher implements OnModuleInit, OnModuleDestroy {
     await this.ready;
     if (!this.connection) throw new Error('RabbitMQ connection not initialized');
 
-    const consumers = options?.consumers ?? 5; // default 5 workers
-    const prefetch = options?.prefetch ?? 10;
+    const consumers = options?.consumers ?? 100;
+    const prefetch = options?.prefetch ?? 1000;
     const serviceName = 'product-service';
     const queueName = `${routingKey}.${serviceName}`;
 
-    // Ensure queue and binding exist once globally
+    // Ensure queue exists and bind once
     await this.channel.assertQueue(queueName, { durable: true });
     await this.channel.bindQueue(queueName, this.EXCHANGE, routingKey);
 
     this.logger.log(
-      `SUBSCRIBING ${consumers} workers on queue [${queueName}] from exchange [${this.EXCHANGE}] with key [${routingKey}]`,
+      `Spawning ${consumers} workers on queue [${queueName}] (prefetch ${prefetch})`,
     );
 
-    // Spawn multiple workers
+    // Start worker channels
     for (let i = 0; i < consumers; i++) {
-      const workerChannel = await this.connection.createChannel();
-      await workerChannel.prefetch(prefetch);
+      const worker = await this.connection.createChannel();
+      await worker.prefetch(prefetch);
 
-      workerChannel.consume(queueName, async (msg) => {
+      worker.consume(queueName, async (msg) => {
         if (!msg) return;
         try {
           const content = JSON.parse(msg.content.toString());
-          const reqId = content.requestId || 'N/A';
-          this.logger.debug(`[Worker ${i}] [${routingKey}] [RequestID: ${reqId}] Processing message...`);
-
           await callback(content);
-          workerChannel.ack(msg);
+          worker.ack(msg);
         } catch (err) {
-          this.logger.error(`[Worker ${i}] FAILED to process ${routingKey}`, err);
-          workerChannel.nack(msg, false, true);
+          this.logger.error(`Worker ${i} failed`, err);
+          worker.nack(msg, false, true); // retry later
         }
       });
 
-      this.logger.log(`[Worker ${i}] started for [${routingKey}]`);
+      this.logger.debug(`Worker ${i} ready for ${routingKey}`);
     }
   }
 
-  /** Graceful shutdown. */
+  /** Graceful shutdown */
   async close() {
     try {
       if (this.channel) await this.channel.close();
       if (this.connection) await this.connection.close();
-      this.logger.log('RabbitMQ connection closed cleanly.');
+      this.logger.log('RabbitMQ connection closed cleanly');
     } catch (err) {
       this.logger.warn('Error closing RabbitMQ', err);
     }
