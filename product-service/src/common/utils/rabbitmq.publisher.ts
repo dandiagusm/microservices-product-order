@@ -1,11 +1,16 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import * as amqp from 'amqplib';
 import * as crypto from 'crypto';
 
+interface SubscribeOptions {
+  consumers?: number; // number of concurrent workers
+  prefetch?: number;  // max unacked messages per consumer
+}
+
 @Injectable()
-export class RabbitmqPublisher implements OnModuleInit {
+export class RabbitmqPublisher implements OnModuleInit, OnModuleDestroy {
   private connection: amqp.Connection;
-  private channel: amqp.Channel;
+  private channel: amqp.Channel; // control channel
   private readonly logger = new Logger(RabbitmqPublisher.name);
   private readonly EXCHANGE = 'events';
   public ready: Promise<void>;
@@ -19,6 +24,10 @@ export class RabbitmqPublisher implements OnModuleInit {
 
   async onModuleInit() {
     await this.setupConnection();
+  }
+
+  async onModuleDestroy() {
+    await this.close();
   }
 
   private async setupConnection() {
@@ -42,13 +51,6 @@ export class RabbitmqPublisher implements OnModuleInit {
         await this.channel.assertExchange(this.EXCHANGE, 'topic', { durable: true });
 
         this.logger.log('RabbitMQ CONNECTED');
-
-        const serviceName = 'product-service';
-        const productQueue = `product.created.${serviceName}`;
-        await this.channel.assertQueue(productQueue, { durable: true });
-        await this.channel.bindQueue(productQueue, this.EXCHANGE, 'product.created');
-        this.logger.log(`Queue ${productQueue} bound to exchange ${this.EXCHANGE} with key product.created`);
-
         this.readyResolve();
       } catch (err) {
         this.logger.error('RabbitMQ connection failed. Retrying in 5s', err);
@@ -59,7 +61,7 @@ export class RabbitmqPublisher implements OnModuleInit {
     await connect();
   }
 
-  async publish(routingKey: string, data: any, requestId?: string) {
+  async publish(routingKey: string, data: any, requestId?: string): Promise<void> {
     await this.ready;
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
 
@@ -69,54 +71,67 @@ export class RabbitmqPublisher implements OnModuleInit {
       timestamp: new Date().toISOString(),
     };
 
-    this.channel.publish(
-      this.EXCHANGE,
-      routingKey,
-      Buffer.from(JSON.stringify(message)),
-      { persistent: true, contentType: 'application/json' },
-    );
-
-    this.logger.log(`[RequestID: ${message.requestId}] [${routingKey}] PUBLISHED`);
+    try {
+      this.channel.publish(
+        this.EXCHANGE,
+        routingKey,
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true, contentType: 'application/json' },
+      );
+      this.logger.debug(`[${routingKey}] [RequestID:${message.requestId}] Published`);
+    } catch (err) {
+      this.logger.error(`Failed to publish ${routingKey}`, err);
+    }
   }
 
   async subscribe(
     routingKey: string,
     callback: (msg: any) => void | Promise<void>,
+    options?: SubscribeOptions,
   ) {
     await this.ready;
-    if (!this.channel) throw new Error('RabbitMQ channel not initialized');
+    if (!this.connection) throw new Error('RabbitMQ connection not initialized');
 
+    const consumers = options?.consumers ?? 100;
+    const prefetch = options?.prefetch ?? 1000;
     const serviceName = 'product-service';
     const queueName = `${routingKey}.${serviceName}`;
 
+    // Ensure queue exists and bind once
     await this.channel.assertQueue(queueName, { durable: true });
     await this.channel.bindQueue(queueName, this.EXCHANGE, routingKey);
 
     this.logger.log(
-      `SUBSCRIBED queue [${queueName}] to exchange [${this.EXCHANGE}] with key [${routingKey}]`,
+      `Spawning ${consumers} workers on queue [${queueName}] (prefetch ${prefetch})`,
     );
 
-    this.channel.consume(queueName, async (msg) => {
-      if (!msg) return;
+    // Start worker channels
+    for (let i = 0; i < consumers; i++) {
+      const worker = await this.connection.createChannel();
+      await worker.prefetch(prefetch);
 
-      try {
-        const content = JSON.parse(msg.content.toString());
-        const reqId = content.requestId || 'N/A';
-        this.logger.log(`[RequestID: ${reqId}] RECEIVED: ${routingKey}`);
+      worker.consume(queueName, async (msg) => {
+        if (!msg) return;
+        try {
+          const content = JSON.parse(msg.content.toString());
+          await callback(content);
+          worker.ack(msg);
+        } catch (err) {
+          this.logger.error(`Worker ${i} failed`, err);
+          worker.nack(msg, false, true); // retry later
+        }
+      });
 
-        await callback(content);
-        this.channel.ack(msg);
-      } catch (err) {
-        this.logger.error(`FAILED to handle message on ${routingKey}`, err);
-        this.channel.nack(msg, false, true);
-      }
-    });
+      this.logger.debug(`Worker ${i} ready for ${routingKey}`);
+    }
   }
 
+  /** Graceful shutdown */
   async close() {
     try {
       if (this.channel) await this.channel.close();
       if (this.connection) await this.connection.close();
+      this.logger.log('RabbitMQ connection closed cleanly');
     } catch (err) {
       this.logger.warn('Error closing RabbitMQ', err);
     }

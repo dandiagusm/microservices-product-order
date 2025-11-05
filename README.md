@@ -88,35 +88,50 @@ docker compose exec k6 k6 run /scripts/script.js
 
 ```
   █ THRESHOLDS
+
     errors
-    ✗ 'count<1000' count=1794
+    ✓ 'count<1000' count=0
+
     http_req_duration
-    ✓ 'p(95)<1000' p(95)=23.66ms
+    ✓ 'p(95)<1000' p(95)=9.77ms
+
     http_req_failed
     ✓ 'rate<0.05' rate=0.00%
+
     latency_ms
-    ✓ 'p(95)<1000' p(95)=23.663825
+    ✓ 'p(95)<1000' p(95)=9.77682
+
 
   █ TOTAL RESULTS
-    checks_total.......: 164834 1176.908139/s
-    checks_succeeded...: 98.91% 163040 out of 164834
-    checks_failed......: 1.08%  1794 out of 164834
+
+    checks_total.......: 175998  1600.061977/s
+    checks_succeeded...: 100.00% 175998 out of 175998
+    checks_failed......: 0.00%   0 out of 175998
 
     ✓ status is 200
-    ✗ duration < 1s
-      ↳  97% — ✓ 80623 / ✗ 1794
+    ✓ duration < 1s
 
     CUSTOM
-    errors.........................: 1794  12.809088/s
-    latency_ms.....................: avg=257.251492 min=1.914971 med=3.996582 max=46675.317678 p(90)=10.918569 p(95)=23.663825
+    errors.........................: 0     0/s
+    latency_ms.....................: avg=4.445527 min=0.861288 med=3.29435 max=233.995741 p(90)=7.522462 p(95)=9.77682
 
     HTTP
-    http_req_duration..............: avg=257.25ms   min=1.91ms   med=3.99ms   max=46.67s       p(90)=10.91ms   p(95)=23.66ms
-      { expected_response:true }...: avg=257.25ms   min=1.91ms   med=3.99ms   max=46.67s       p(90)=10.91ms   p(95)=23.66ms
-    http_req_failed................: 0.00% 0 out of 82417
-    http_reqs......................: 82417 588.45407/s
+    http_req_duration..............: avg=4.44ms   min=861.28µs med=3.29ms  max=233.99ms   p(90)=7.52ms   p(95)=9.77ms
+      { expected_response:true }...: avg=4.44ms   min=861.28µs med=3.29ms  max=233.99ms   p(90)=7.52ms   p(95)=9.77ms
+    http_req_failed................: 0.00% 0 out of 87999
+    http_reqs......................: 87999 800.030988/s
+
+    EXECUTION
+    iteration_duration.............: avg=6.07ms   min=3.13ms   med=4.94ms  max=235.87ms   p(90)=9.18ms   p(95)=11.6ms
+    iterations.....................: 87999 800.030988/s
+    vus............................: 0     min=0          max=25
+    vus_max........................: 500   min=500        max=500
+
+    NETWORK
+    data_received..................: 24 MB 215 kB/s
+    data_sent......................: 14 MB 130 kB/s
 ```
-Based on http_reqs, RPS (Requests per second) is 588
+Based on http_reqs, RPS (Requests per second) is 800
 
 # Architecture
 
