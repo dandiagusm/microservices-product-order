@@ -1,6 +1,3 @@
-# VIDEO
-Please check the video_url in docs folder or go directly to [Link Video](https://drive.google.com/file/d/1mSTbEGRmQELOfolM7sGasJ4XAOooAlWq/view?usp=sharing)
-
 # Microservices Product & Order System
 ## Run Locally with Docker
 
